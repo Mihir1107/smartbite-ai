@@ -22,6 +22,7 @@ import {
   getRecommendationReason,
   type RecommenderItem,
 } from "@/lib/recommender";
+import { API_BASE } from "@/lib/api";
 
 type MenuItem = {
   id: number;
@@ -99,8 +100,6 @@ const CATEGORY_TABS = [
   "Rice",
   "Starters",
 ] as const;
-
-const API_BASE = "http://localhost:8000";
 
 const CONFIRM_ORDER_REGEX =
   /\b(yes|confirm|place\s*order|checkout|finalize|done)\b/i;
