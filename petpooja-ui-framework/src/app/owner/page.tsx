@@ -22,8 +22,7 @@ import {
   SectionTitle,
   Footer,
 } from "@/components/shared";
-
-const API_BASE = "http://localhost:8000";
+import { API_BASE } from "@/lib/api";
 
 type LiveOrder = {
   id: number;
@@ -99,10 +98,10 @@ export default function OwnerDashboard() {
         missedCallsResponse,
         aiRecommendationsResponse,
       ] = await Promise.all([
-        fetch("http://localhost:8000/api/dashboard/summary"),
-        fetch("http://localhost:8000/api/menu/analytics"),
-        fetch("http://localhost:8000/api/missed-calls"),
-        fetch("http://localhost:8000/api/menu/ai-recommendations"),
+        fetch(`${API_BASE}/api/dashboard/summary`),
+        fetch(`${API_BASE}/api/menu/analytics`),
+        fetch(`${API_BASE}/api/missed-calls`),
+        fetch(`${API_BASE}/api/menu/ai-recommendations`),
       ]);
 
       if (
