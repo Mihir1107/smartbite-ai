@@ -589,14 +589,9 @@ export default function OwnerDashboard() {
                 Revenue Analytics
               </button>
             </Link>
-            <Link href="/owner/voice-copilot">
+            <Link href="/orders">
               <button className="px-6 py-3 bg-white text-[#DA291C] font-black rounded-xl hover:bg-gray-100 transition-all shadow-lg">
-                Take Voice Order
-              </button>
-            </Link>
-            <Link href="/owner/ghost-recovery">
-              <button className="px-6 py-3 bg-white text-[#DA291C] font-black rounded-xl hover:bg-gray-100 transition-all shadow-lg">
-                Check Missed Calls
+                Live Orders
               </button>
             </Link>
           </div>

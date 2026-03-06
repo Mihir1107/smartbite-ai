@@ -2,9 +2,11 @@
 .DS_Store
 .idea/
 .vscode/
+*.swp
 
 # Python
 .env
+.env.local
 .venv/
 venv/
 __pycache__/
@@ -21,6 +23,11 @@ dist/
 .next/
 out/
 coverage/
+bun.lock
+.orchids/
+
+# Build artifacts
+tsconfig.tsbuildinfo
 
 # Logs and temp
 *.log
