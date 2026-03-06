@@ -10,6 +10,7 @@ import {
   ArrowRight,
   UtensilsCrossed,
 } from "lucide-react";
+import { API_BASE } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export default function LoginPage() {
       formData.append("username", loginUsername);
       formData.append("password", loginPassword);
 
-      const response = await fetch("http://localhost:8000/api/auth/login", {
+      const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: "POST",
         body: formData,
       });
