@@ -254,6 +254,11 @@ const CALL_ALIAS_TO_ITEM: Record<string, string> = {
   "lime soda": "Fresh Lime Soda",
   lassi: "Salted Lassi",
   chai: "Masala Chai",
+  "lachha paratha": "Laccha Paratha",
+  "lachcha paratha": "Laccha Paratha",
+  "laccha parota": "Laccha Paratha",
+  "cold cof": "Cold Coffee",
+  "cold cofee": "Cold Coffee",
 };
 
 const extractQtyBeforeIndex = (text: string, startIdx: number): number => {
@@ -867,7 +872,7 @@ export default function UserDashboard() {
       const recognition = new Ctor();
       recognition.lang = "en-IN";
       recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+      recognition.maxAlternatives = 3;
       callRecognitionRef.current = recognition;
 
       let resolved = false;
@@ -883,7 +888,19 @@ export default function UserDashboard() {
         const se = event as Event & {
           results?: ArrayLike<ArrayLike<{ transcript?: string }>>;
         };
-        done(se.results?.[0]?.[0]?.transcript?.trim() || null);
+        const firstResult = se.results?.[0];
+        if (!firstResult) {
+          done(null);
+          return;
+        }
+
+        const alternatives = Array.from(firstResult);
+        const bestTranscript = alternatives
+          .map((alt) => (alt?.transcript || "").trim())
+          .filter(Boolean)
+          .sort((a, b) => b.length - a.length)[0];
+
+        done(bestTranscript || null);
       };
       recognition.onerror = () => done(null);
       recognition.onend = () => done(null);
@@ -949,6 +966,29 @@ export default function UserDashboard() {
       const newItems: { name: string; qty: number; price: number }[] =
         data.items || [];
 
+      const applyLocalItemFallback = (): string | null => {
+        const localItems = parseCallTranscriptItems(
+          spokenText,
+          menuItemsRef.current,
+        );
+        if (!localItems.length) return null;
+
+        const mergedItems = mergeOrderItems(pendingItems, localItems);
+        const mergedTotal = mergedItems.reduce(
+          (s, i) => s + i.qty * i.price,
+          0,
+        );
+        setCallDraftItems(mergedItems);
+        syncItemsToCart(mergedItems);
+
+        const itemSummary = localItems
+          .map((i) => `${i.qty} ${i.name}`)
+          .join(" and ");
+        const fallbackReply = `I've added ${itemSummary}. Your total is ₹${mergedTotal}. Would you like anything else?`;
+        addCallMsg("assistant", fallbackReply);
+        return fallbackReply;
+      };
+
       switch (intent) {
         case "add_items": {
           if (newItems.length) {
@@ -970,6 +1010,12 @@ export default function UserDashboard() {
             addCallMsg("assistant", reply);
             return reply;
           }
+
+          const localFallbackReply = applyLocalItemFallback();
+          if (localFallbackReply) {
+            return localFallbackReply;
+          }
+
           const fallback =
             aiReply ||
             "I couldn't find that item on our menu. Could you try again?";
@@ -1085,12 +1131,37 @@ export default function UserDashboard() {
         }
 
         default: {
+          const localFallbackReply = applyLocalItemFallback();
+          if (localFallbackReply) {
+            return localFallbackReply;
+          }
+
           const reply = aiReply || "I'm sorry, could you say that again?";
           addCallMsg("assistant", reply);
           return reply;
         }
       }
     } catch {
+      const localItems = parseCallTranscriptItems(
+        spokenText,
+        menuItemsRef.current,
+      );
+      if (localItems.length) {
+        const mergedItems = mergeOrderItems(pendingItems, localItems);
+        const mergedTotal = mergedItems.reduce(
+          (s, i) => s + i.qty * i.price,
+          0,
+        );
+        setCallDraftItems(mergedItems);
+        syncItemsToCart(mergedItems);
+        const itemSummary = localItems
+          .map((i) => `${i.qty} ${i.name}`)
+          .join(" and ");
+        const reply = `I've added ${itemSummary}. Your total is ₹${mergedTotal}. Would you like anything else?`;
+        addCallMsg("assistant", reply);
+        return reply;
+      }
+
       const reply =
         "I'm having trouble processing that right now. Could you say it again?";
       addCallMsg("assistant", reply);
