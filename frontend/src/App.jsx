@@ -1126,9 +1126,236 @@ function usePollableFetch(endpoint, mockData, tick) {
   return { data, loading };
 }
 
-// ─── MAIN APP ─────────────────────────────────────────────────────────────
+// ─── LOGIN SCREEN ─────────────────────────────────────────────────────────
 
-export default function SmartBiteApp() {
+function LoginScreen({ onUserSelect }) {
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#080d14", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", color: "#f1f5f9", fontFamily: "'Inter', sans-serif"
+    }}>
+      <div style={{
+        width: 80, height: 80, borderRadius: 20, background: "linear-gradient(135deg,#f97316,#ea580c)",
+        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 20,
+        boxShadow: "0 10px 30px rgba(249,115,22,0.3)"
+      }}>
+        🍛
+      </div>
+      <h1 style={{ fontSize: 32, fontWeight: 800, marginBottom: 8, letterSpacing: "-0.02em" }}>SmartBite AI</h1>
+      <p style={{ color: "#94a3b8", marginBottom: 40, fontSize: 15 }}>Select your portal</p>
+      
+      <div style={{ display: "flex", gap: 20 }}>
+        <button onClick={() => onUserSelect("customer")} style={{
+          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 20, padding: "32px 40px", cursor: "pointer", display: "flex", flexDirection: "column",
+          alignItems: "center", gap: 16, transition: "all 0.2s", width: 220
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}>
+          <div style={{ fontSize: 48 }}>👤</div>
+          <div style={{ fontWeight: 700, fontSize: 18, color: "#f1f5f9" }}>Customer</div>
+          <div style={{ color: "#64748b", fontSize: 13, textAlign: "center" }}>AI Voice Ordering Experience</div>
+        </button>
+        
+        <button onClick={() => onUserSelect("manager")} style={{
+          background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.2)",
+          borderRadius: 20, padding: "32px 40px", cursor: "pointer", display: "flex", flexDirection: "column",
+          alignItems: "center", gap: 16, transition: "all 0.2s", width: 220
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.15)"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.1)"; }}>
+          <div style={{ fontSize: 48 }}>📊</div>
+          <div style={{ fontWeight: 700, fontSize: 18, color: "#f97316" }}>Restaurant Manager</div>
+          <div style={{ color: "#f97316", opacity: 0.8, fontSize: 13, textAlign: "center" }}>Revenue Copilot Dashboard</div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── CUSTOMER VIEW (VOICE CHAT) ───────────────────────────────────────────
+
+function CustomerView({ onLogout }) {
+  const [recording, setRecording] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [messages, setMessages] = useState([
+    { role: 'assistant', text: "Welcome to SmartBite! Tap the microphone to tell me what you'd like to order." }
+  ]);
+  const [convoState, setConvoState] = useState({ items: [], completed: false });
+  
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const audioRef = useRef(null);
+
+  const handleStartRecording = async () => {
+    if (processing) return;
+    try {
+      if (audioRef.current) {
+         audioRef.current.pause();
+         audioRef.current = null;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        setRecording(false);
+        setProcessing(true);
+
+        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("audio", audioBlob, "recording.webm");
+        formData.append("state", JSON.stringify(convoState));
+
+        try {
+          const res = await fetch(API + "/api/voice/conversation", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await res.json();
+          
+          if (data.success) {
+            setConvoState(data.state);
+            
+            const newMsgs = [...messages];
+            if (data.transcript) {
+                newMsgs.push({ role: 'user', text: data.transcript });
+            }
+            if (data.reply_text) {
+                newMsgs.push({ role: 'assistant', text: data.reply_text });
+            }
+            setMessages(newMsgs);
+
+            if (data.audio_base64) {
+              const audioObj = new Audio(data.audio_base64);
+              audioRef.current = audioObj;
+              audioObj.play();
+            }
+          } else {
+             setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, I had trouble understanding that. Please try again." }]);
+          }
+        } catch (err) {
+          console.error(err);
+          setMessages(prev => [...prev, { role: 'assistant', text: "Sorry, there was a network error connecting to the intelligence engine." }]);
+        } finally {
+          setProcessing(false);
+          stream.getTracks().forEach((track) => track.stop());
+        }
+      };
+
+      mediaRecorder.start();
+      setRecording(true);
+    } catch (err) {
+      console.error("Microphone access denied or error:", err);
+      alert("Microphone access is required for the conversational AI.");
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh", background: "#f8fafc", color: "#0f172a", fontFamily: "'Inter', sans-serif",
+      display: "flex", flexDirection: "column"
+    }}>
+      {/* Header */}
+      <div style={{
+        background: "#fff", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)", zIndex: 10
+      }}>
+         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg,#f97316,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🍛</div>
+           <div style={{ fontWeight: 800, fontSize: 18, color: "#0f172a" }}>SmartBite <span style={{ color: "#f97316" }}>AI</span></div>
+         </div>
+         <button onClick={onLogout} style={{ background: "transparent", border: "1px solid #cbd5e1", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>Exit</button>
+      </div>
+
+      {/* Chat Transcript Area */}
+      <div style={{ flex: 1, overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 16, paddingBottom: 140 }}>
+         {messages.map((msg, idx) => (
+           <div key={idx} style={{
+             alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+             maxWidth: '80%',
+             background: msg.role === 'user' ? '#f97316' : '#fff',
+             color: msg.role === 'user' ? '#fff' : '#334155',
+             padding: "12px 16px",
+             borderRadius: msg.role === 'user' ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+             boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+             fontSize: 15,
+             lineHeight: 1.5,
+             fontWeight: 500
+           }}>
+              {msg.text}
+           </div>
+         ))}
+         {processing && (
+            <div style={{ alignSelf: 'flex-start', background: '#fff', color: '#94a3b8', padding: "12px 16px", borderRadius: "16px 16px 16px 4px", fontSize: 14, fontStyle: "italic", display: "flex", gap: 8, alignItems: "center", boxShadow: "0 2px 10px rgba(0,0,0,0.05)" }}>
+               <div className="dot-flashing"></div> Thinking...
+               <style>{`
+                 .dot-flashing {
+                    position: relative; width: 6px; height: 6px; border-radius: 3px; background-color: #f97316; animation: dot-flashing 1s infinite alternate; animation-delay: 0.5s;
+                 }
+                 .dot-flashing::before, .dot-flashing::after {
+                    content: ''; display: inline-block; position: absolute; top: 0; width: 6px; height: 6px; border-radius: 3px; background-color: #f97316; animation: dot-flashing 1s infinite alternate;
+                 }
+                 .dot-flashing::before { left: -10px; animation-delay: 0s; }
+                 .dot-flashing::after { left: 10px; animation-delay: 1s; }
+                 @keyframes dot-flashing { 0% { background-color: #f97316; } 50%, 100% { background-color: #fed7aa; } }
+               `}</style>
+            </div>
+         )}
+      </div>
+
+      {/* Mic Area */}
+      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "linear-gradient(to top, #f8fafc 80%, rgba(248,250,252,0))", padding: "40px 20px 30px", display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: 12 }}>
+         {convoState.completed ? (
+            <div style={{ background: "#10b981", color: "#fff", padding: "16px 32px", borderRadius: 30, fontWeight: 700, fontSize: 16, display: "flex", alignItems: "center", gap: 8, boxShadow: "0 10px 25px rgba(16,185,129,0.3)" }}>
+              ✅ Order Completed
+            </div>
+         ) : (
+            <>
+               <button
+                 onMouseDown={handleStartRecording}
+                 onMouseUp={handleStopRecording}
+                 onMouseLeave={handleStopRecording}
+                 onTouchStart={handleStartRecording}
+                 onTouchEnd={handleStopRecording}
+                 style={{
+                   width: 80, height: 80, borderRadius: "50%",
+                   background: recording ? "#ef4444" : "#f97316",
+                   border: "none", color: "#fff", fontSize: 32,
+                   cursor: processing ? "not-allowed" : "pointer",
+                   boxShadow: recording ? "0 0 0 10px rgba(239,68,68,0.2), 0 10px 25px rgba(239,68,68,0.5)" : "0 10px 25px rgba(249,115,22,0.3)",
+                   display: "flex", alignItems: "center", justifyContent: "center",
+                   transition: "all 0.2s", opacity: processing ? 0.6 : 1,
+                   transform: recording ? "scale(1.05)" : "scale(1)"
+                 }}
+                 disabled={processing}
+               >
+                 🎙
+               </button>
+               <div style={{ color: "#64748b", fontSize: 13, fontWeight: 600 }}>
+                 {recording ? "Listening... Release to send" : processing ? "Processing order..." : "Hold to speak"}
+               </div>
+            </>
+         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── MANAGER DASHBOARD ────────────────────────────────────────────────────
+
+function ManagerDashboard({ onLogout }) {
   const [tab, setTab] = useState("overview");
   const [actionItem, setActionItem] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1310,31 +1537,34 @@ export default function SmartBiteApp() {
             Revenue Copilot
           </span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: "#4ade80",
-              boxShadow: "0 0 10px #4ade80",
-              animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-            }}
-          />
-          <style>
-            {`
-              @keyframes pulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: .5; }
-              }
-            `}
-          </style>
-          <span style={{ color: "#4ade80", fontSize: 12, fontWeight: 600 }}>
-            Live
-          </span>
-          <span style={{ color: "#64748b", fontSize: 12, marginLeft: 8 }}>
-            Petpooja PoS Connected
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: "#4ade80",
+                boxShadow: "0 0 10px #4ade80",
+                animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+              }}
+            />
+            <style>
+              {`
+                @keyframes pulse {
+                  0%, 100% { opacity: 1; }
+                  50% { opacity: .5; }
+                }
+              `}
+            </style>
+            <span style={{ color: "#4ade80", fontSize: 12, fontWeight: 600 }}>
+              Live
+            </span>
+            <span style={{ color: "#64748b", fontSize: 12, marginLeft: 8 }}>
+              Petpooja PoS Connected
+            </span>
+          </div>
+          <button onClick={onLogout} style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, color: "#94a3b8", cursor: "pointer" }}>Exit</button>
         </div>
       </div>
 
@@ -2115,4 +2345,22 @@ export default function SmartBiteApp() {
       <ActionModal item={actionItem} onClose={() => setActionItem(null)} />
     </div>
   );
+}
+
+
+
+// ─── MAIN APP ROUTER ──────────────────────────────────────────────────────
+
+export default function App() {
+  const [role, setRole] = useState(null); // 'customer' or 'manager'
+
+  if (!role) {
+    return <LoginScreen onUserSelect={setRole} />;
+  }
+
+  if (role === "customer") {
+    return <CustomerView onLogout={() => setRole(null)} />;
+  }
+
+  return <ManagerDashboard onLogout={() => setRole(null)} />;
 }

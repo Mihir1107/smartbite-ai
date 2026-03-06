@@ -1,10 +1,18 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
 import sqlite3, json, os, tempfile, shutil, openai
 from datetime import datetime, timedelta
-import random
+import random, base64
+from pydantic import BaseModel, Field
+from typing import List
 from dotenv import load_dotenv
+from database import connect_to_mongo, close_mongo_connection, get_database
+from auth import (
+    authenticate_user, create_access_token, get_current_user, get_current_owner,
+    Token, User, get_password_hash, create_default_users, ACCESS_TOKEN_EXPIRE_MINUTES
+)
 
 load_dotenv()
 
@@ -12,10 +20,31 @@ app = FastAPI(title="SmartBite AI API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
+
+# ─── STARTUP & SHUTDOWN ─────────────────────────────────────────────────────
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database connections on startup"""
+    await connect_to_mongo()
+    db = get_database()
+    if db is not None:
+        await create_default_users(db)
+    init_db()  # SQLite init for backward compatibility
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close database connections on shutdown"""
+    await close_mongo_connection()
 
 DB_PATH = "smartbite.db"
 
@@ -308,6 +337,82 @@ def compute_dead_hours(conn):
 @app.get("/")
 def root():
     return {"status": "SmartBite AI is running 🚀"}
+
+# ─── AUTHENTICATION ─────────────────────────────────────────────────────────
+
+@app.post("/api/auth/register", response_model=Token)
+async def register(username: str, password: str, email: str, role: str = "user", full_name: str = None):
+    """Register a new user"""
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    
+    # Check if user already exists
+    existing_user = await db.users.find_one({"$or": [{"username": username}, {"email": email}]})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username or email already registered")
+    
+    # Validate role
+    if role not in ["user", "owner"]:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'user' or 'owner'")
+    
+    # Create new user
+    user_data = {
+        "username": username,
+        "email": email,
+        "full_name": full_name or username,
+        "role": role,
+        "hashed_password": get_password_hash(password),
+        "disabled": False,
+        "created_at": datetime.utcnow()
+    }
+    
+    await db.users.insert_one(user_data)
+    
+    # Create access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": username, "role": role}, expires_delta=access_token_expires
+    )
+    
+    return Token(access_token=access_token, token_type="bearer", role=role, username=username)
+
+
+@app.post("/api/auth/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """Login and get access token"""
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    
+    user = await authenticate_user(db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username, "role": user.role}, expires_delta=access_token_expires
+    )
+    
+    return Token(access_token=access_token, token_type="bearer", role=user.role, username=user.username)
+
+
+@app.get("/api/auth/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    """Get current user info"""
+    return current_user
+
+
+@app.get("/api/auth/validate")
+async def validate_token(current_user: User = Depends(get_current_user)):
+    """Validate JWT token and return user role"""
+    return {"valid": True, "username": current_user.username, "role": current_user.role}
+
+# ─── DASHBOARD & ANALYTICS (OWNER ONLY) ─────────────────────────────────────
 
 @app.get("/api/dashboard/summary")
 def dashboard_summary():
@@ -614,33 +719,96 @@ def voice_demo_endpoint(req: VoiceDemoRequest):
     conn.commit()
     conn.close()
     
-    return result
+    # Return consistent structure with success flag
+    return {
+        "success": True,
+        "transcript": result.get("transcript", ""),
+        "items": result.get("items", []),
+        "total": result.get("total", 0),
+        "summary": result.get("summary", ""),
+        "confidence": result.get("confidence", ""),
+        "upsell": upsell
+    }
 
 @app.post("/api/voice/live")
 def live_voice_endpoint(audio: UploadFile = File(...)):
     """Process live microphone audio"""
     from voice_pipeline import process_voice_order
     
+    print(f"[VOICE] Received audio file: {audio.filename}, content_type: {audio.content_type}")
+    
     # Save audio to temp file
     fd, temp_path = tempfile.mkstemp(suffix=".webm")
     try:
+        audio_content = audio.file.read()
+        file_size = len(audio_content)
+        print(f"[VOICE] Audio file size: {file_size} bytes")
+        
+        if file_size == 0:
+            print("[VOICE] ERROR: Audio file is empty!")
+            return {"success": False, "error": "Audio file is empty. Please try recording again."}
+        
         with os.fdopen(fd, "wb") as f:
-            shutil.copyfileobj(audio.file, f)
+            f.write(audio_content)
+        
+        print(f"[VOICE] Saved audio to: {temp_path}")
+        
+        # Convert webm to wav for better Whisper compatibility
+        wav_path = temp_path.replace('.webm', '.wav')
+        try:
+            import subprocess
+            print(f"[VOICE] Converting webm to wav...")
+            result = subprocess.run([
+                'ffmpeg', '-i', temp_path, '-ar', '16000', '-ac', '1', '-y', wav_path
+            ], capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                print(f"[VOICE] FFmpeg conversion warning: {result.stderr}")
+            else:
+                print(f"[VOICE] Converted to wav successfully")
+                # Use wav file if conversion succeeded
+                audio_file_path = wav_path
+        except Exception as conv_error:
+            print(f"[VOICE] Audio conversion failed: {conv_error}, using original file")
+            audio_file_path = temp_path
             
         # Transcribe
         transcript = ""
-        if os.environ.get("OPENAI_API_KEY"):
-            with open(temp_path, "rb") as f:
-                transcript_response = openai.OpenAI().audio.translations.create(
-                    model="whisper-1", 
-                    file=f
-                )
-                transcript = transcript_response.text
+        api_key = os.environ.get("OPENAI_API_KEY")
+        print(f"[VOICE] OpenAI API Key present: {bool(api_key)}")
+        
+        if api_key:
+            print("[VOICE] Attempting OpenAI Whisper transcription...")
+            try:
+                with open(audio_file_path, "rb") as audio_file:
+                    client = openai.OpenAI(api_key=api_key)
+                    print(f"[VOICE] Sending {os.path.getsize(audio_file_path)} bytes to Whisper API...")
+                    
+                    transcript_response = client.audio.transcriptions.create(
+                        model="whisper-1", 
+                        file=audio_file,
+                        language="en"
+                    )
+                    transcript = transcript_response.text
+                    
+                print(f"[VOICE] ✓ Transcription successful: '{transcript}'")
+            except Exception as whisper_error:
+                print(f"[VOICE] ✗ Whisper transcription failed!")
+                print(f"[VOICE] Error type: {type(whisper_error).__name__}")
+                print(f"[VOICE] Error message: {str(whisper_error)}")
+                import traceback
+                traceback.print_exc()
+                print("[VOICE] Falling back to mock transcript")
+                transcript = "two butter chicken and three garlic naan"
         else:
-            transcript = "ek butter chicken aur do garlic naan"
+            print("[VOICE] No OpenAI API key, using mock transcript")
+            transcript = "two butter chicken and three garlic naan"
+
+        print(f"[VOICE] Transcript: {transcript}")
 
         # Process transcript
         result = process_voice_order(transcript_override=transcript, db_path=DB_PATH)
+        print(f"[VOICE] Processed order result: {result}")
         
         # Save to database
         conn = get_db()
@@ -658,7 +826,7 @@ def live_voice_endpoint(audio: UploadFile = File(...)):
         conn.commit()
         conn.close()
         
-        return {
+        response_data = {
             "success": True, 
             "transcript": transcript, 
             "items": result.get("items", []), 
@@ -666,11 +834,519 @@ def live_voice_endpoint(audio: UploadFile = File(...)):
             "summary": result.get("summary", ""), 
             "confidence": result.get("confidence", "")
         }
+        print(f"[VOICE] Returning response: {response_data}")
+        return response_data
     except Exception as e:
-        print(f"Error processing live audio: {e}")
+        print(f"[VOICE] Error processing live audio: {e}")
+        import traceback
+        traceback.print_exc()
         return {"success": False, "error": str(e)}
     finally:
-        os.remove(temp_path)
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            print(f"[VOICE] Cleaned up temp file: {temp_path}")
+
+from fastapi import Form
+from typing import Optional
+
+
+class DirectOrderLine(BaseModel):
+    menu_item_id: int
+    qty: int = Field(default=1, ge=1)
+
+
+class DirectOrderRequest(BaseModel):
+    session_id: Optional[str] = "menu_direct"
+    items: List[DirectOrderLine]
+
+
+@app.get("/api/menu/items")
+def get_menu_items():
+    """Return active menu items for customer direct ordering UI."""
+    conn = get_db()
+    c = conn.cursor()
+    rows = c.execute(
+        """
+        SELECT id, name, category, selling_price
+        FROM menu_items
+        WHERE is_active = 1
+        ORDER BY category, name
+        """
+    ).fetchall()
+    conn.close()
+
+    items = [
+        {
+            "id": r["id"],
+            "name": r["name"],
+            "category": r["category"],
+            "selling_price": r["selling_price"],
+        }
+        for r in rows
+    ]
+    return {"success": True, "items": items}
+
+
+@app.post("/api/order/direct")
+def create_direct_order(payload: DirectOrderRequest):
+    """Create a customer order directly from selected menu items."""
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="Order must include at least one item")
+
+    conn = get_db()
+    c = conn.cursor()
+
+    # Validate IDs in one query and build a price/name lookup.
+    wanted_ids = [line.menu_item_id for line in payload.items]
+    placeholders = ",".join(["?"] * len(wanted_ids))
+    menu_rows = c.execute(
+        f"""
+        SELECT id, name, selling_price
+        FROM menu_items
+        WHERE is_active = 1 AND id IN ({placeholders})
+        """,
+        wanted_ids,
+    ).fetchall()
+
+    menu_map = {
+        r["id"]: {
+            "name": r["name"],
+            "price": float(r["selling_price"]),
+        }
+        for r in menu_rows
+    }
+
+    missing_ids = [line.menu_item_id for line in payload.items if line.menu_item_id not in menu_map]
+    if missing_ids:
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"Invalid menu_item_id(s): {missing_ids}")
+
+    order_lines = []
+    order_total = 0.0
+    for line in payload.items:
+        item_info = menu_map[line.menu_item_id]
+        line_total = item_info["price"] * line.qty
+        order_total += line_total
+        order_lines.append(
+            {
+                "menu_item_id": line.menu_item_id,
+                "name": item_info["name"],
+                "qty": line.qty,
+                "price": item_info["price"],
+                "line_total": round(line_total, 2),
+            }
+        )
+
+    now = datetime.now().isoformat()
+    c.execute(
+        "INSERT INTO orders (order_time, total_amount, source, items_json) VALUES (?,?,?,?)",
+        (now, round(order_total, 2), "direct_menu", json.dumps(order_lines)),
+    )
+    order_id = c.lastrowid
+
+    for line in payload.items:
+        c.execute(
+            "INSERT INTO order_items (order_id, menu_item_id, quantity) VALUES (?,?,?)",
+            (order_id, line.menu_item_id, line.qty),
+        )
+
+    # Keep a lightweight audit row consistent with other channels.
+    c.execute(
+        "INSERT INTO voice_orders (phone, transcript, structured_order, created_at, status) VALUES (?,?,?,?,?)",
+        (
+            payload.session_id or "menu_direct",
+            "Direct menu order",
+            json.dumps(order_lines),
+            now,
+            "confirmed",
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "success": True,
+        "order_id": order_id,
+        "total": round(order_total, 2),
+        "items": order_lines,
+    }
+
+@app.post("/api/voice/conversation")
+def conversation_voice_endpoint(
+    audio: UploadFile = File(...),
+    session_id: Optional[str] = Form(None),
+    state: Optional[str] = Form(None)
+):
+    """Process customer voice, extract order, generate upsell script, and return TTS audio"""
+    from voice_pipeline import process_voice_order, get_voice_upsell
+    
+    print(f"[CONVERSATION] Received audio file: {audio.filename}")
+    
+    # Save audio to temp file
+    fd, temp_path = tempfile.mkstemp(suffix=".webm")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            shutil.copyfileobj(audio.file, f)
+            
+        # 1. Transcribe
+        transcript = ""
+        if os.environ.get("OPENAI_API_KEY"):
+            print("[CONVERSATION] Using OpenAI Whisper for transcription")
+            try:
+                with open(temp_path, "rb") as f:
+                    client = openai.OpenAI()
+                    transcript_response = client.audio.transcriptions.create(
+                        model="whisper-1", 
+                        file=f,
+                        language="en"
+                    )
+                    transcript = transcript_response.text
+                print(f"[CONVERSATION] Transcription successful: {transcript}")
+            except Exception as whisper_error:
+                print(f"[CONVERSATION] Whisper failed: {whisper_error}")
+                transcript = "I would like one butter chicken and two plain naan"
+        else:
+            transcript = "I would like one butter chicken and two plain naan"
+
+        print(f"[CONVERSATION] Customer said: {transcript}")
+        
+        # Check if this is a "Yes/No" response to a previous upsell
+        norm_text = transcript.lower().strip()
+        is_yes = "yes" in norm_text or "yeah" in norm_text or "sure" in norm_text or "ok" in norm_text or "do it" in norm_text or "add" in norm_text or "haan" in norm_text
+
+        # Parse State if exists
+        current_state = {}
+        if state:
+            try:
+                current_state = json.loads(state)
+            except Exception:
+                pass
+                
+        reply_text = ""
+        final_items = current_state.get("items", [])
+        
+        # 2. Logic depending on conversation state
+        if current_state.get("awaiting_upsell_response"):
+            upsell_item = current_state.get("last_upsell_item")
+            if is_yes and upsell_item:
+                # Add upsell to order
+                final_items.append({
+                    "name": upsell_item.get("name"),
+                    "qty": 1,
+                    "price": upsell_item.get("price")
+                })
+                reply_text = f"Great! I've added the {upsell_item.get('name')} to your order. Your food will be ready shortly. Enjoy your meal!"
+            else:
+                reply_text = "No problem. Your order has been placed successfully. It will be ready shortly."
+                
+            # Finalize Order in Database
+            now = datetime.now().isoformat()
+            total = sum(i.get("price", 0) * i.get("qty", 1) for i in final_items)
+            conn = get_db()
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO voice_orders (phone, transcript, structured_order, created_at, status) VALUES (?,?,?,?,?)",
+                ("CUSTOMER_CHAT", "Finalized Order", json.dumps(final_items), now, "confirmed")
+            )
+            c.execute("INSERT INTO orders (order_time, total_amount, source) VALUES (?,?,?)", (now, total, "voice"))
+            conn.commit()
+            conn.close()
+            
+            current_state["completed"] = True
+            current_state["awaiting_upsell_response"] = False
+            
+        else:
+            # First interaction - Parse food
+            result = process_voice_order(transcript_override=transcript, db_path=DB_PATH)
+            new_items = result.get("items", [])
+            
+            if not new_items:
+                reply_text = "I'm sorry, I didn't quite catch what you wanted to order. Could you repeat that?"
+            else:
+                final_items.extend(new_items)
+                
+                # Check for Combos / Upsells
+                conn = get_db()
+                dead = compute_dead_hours(conn)
+                current_hour = datetime.now().strftime("%H")
+                is_dead_hour = any(d["hour"] == current_hour for d in dead["dead_hours"])
+                combos = compute_combos(conn)
+                conn.close()
+                
+                upsell = get_voice_upsell(final_items, is_dead_hour, combos)
+                
+                # Assemble reply string
+                items_str_list = [f"{i['qty']} {i['name']}" for i in final_items]
+                items_str = ", ".join(items_str_list)
+                
+                if upsell.get("should_upsell"):
+                    reply_text = f"Got it, I have added {items_str} to your order. {upsell.get('message')}"
+                    current_state["awaiting_upsell_response"] = True
+                    current_state["last_upsell_item"] = {
+                        "name": upsell.get("upsell_item"),
+                        "price": upsell.get("combo_price", 0) # Assumes the price difference is the combo addition
+                    }
+                else:
+                    reply_text = f"Got it, I have ordered {items_str}. Your order will be ready shortly."
+                    
+                    # Store immediately if no upsell path
+                    now = datetime.now().isoformat()
+                    total = sum(i.get("price", 0) * i.get("qty", 1) for i in final_items)
+                    conn = get_db()
+                    c = conn.cursor()
+                    c.execute(
+                        "INSERT INTO voice_orders (phone, transcript, structured_order, created_at, status) VALUES (?,?,?,?,?)",
+                        ("CUSTOMER_CHAT", transcript, json.dumps(final_items), now, "confirmed")
+                    )
+                    c.execute("INSERT INTO orders (order_time, total_amount, source) VALUES (?,?,?)", (now, total, "voice"))
+                    conn.commit()
+                    conn.close()
+                    
+                    current_state["completed"] = True
+
+        current_state["items"] = final_items
+        
+        # 3. Text to Speech Generation (OpenAI)
+        audio_base64 = None
+        if os.environ.get("OPENAI_API_KEY"):
+            print(f"[CONVERSATION] Synthesizing speech for: '{reply_text}'")
+            try:
+                response = openai.OpenAI().audio.speech.create(
+                    model="tts-1",
+                    voice="nova",
+                    input=reply_text,
+                    response_format="mp3"
+                )
+                audio_buffer = response.content
+                audio_base64 = base64.b64encode(audio_buffer).decode('utf-8')
+            except Exception as synth_e:
+                print(f"[CONVERSATION] TTS Error: {synth_e}")
+                
+        return {
+            "success": True,
+            "transcript": transcript,
+            "reply_text": reply_text,
+            "audio_base64": f"data:audio/mp3;base64,{audio_base64}" if audio_base64 else None,
+            "state": current_state
+        }
+        
+    except Exception as e:
+        print(f"[CONVERSATION] Error processing conversation: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+@app.post("/api/voice/chat")
+def voice_chat_endpoint(
+    audio: Optional[UploadFile] = File(None),
+    text: Optional[str] = Form(None),
+    session_id: Optional[str] = Form("default"),
+    conversation_state: Optional[str] = Form("{}"),
+):
+    """Frontend-compatible chat endpoint for text/audio ordering with recommendations."""
+    from voice_pipeline import process_voice_order, get_voice_upsell
+
+    def _safe_state(raw_state: Optional[str]) -> dict:
+        if not raw_state:
+            return {}
+        try:
+            parsed = json.loads(raw_state)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+
+    def _finalize_order(items: list, sid: str, transcript_text: str) -> None:
+        if not items:
+            return
+        now = datetime.now().isoformat()
+        total_amount = sum(i.get("price", 0) * i.get("qty", 1) for i in items)
+        conn = get_db()
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO voice_orders (phone, transcript, structured_order, created_at, status) VALUES (?,?,?,?,?)",
+            (sid or "default", transcript_text, json.dumps(items), now, "confirmed"),
+        )
+        c.execute(
+            "INSERT INTO orders (order_time, total_amount, source, items_json) VALUES (?,?,?,?)",
+            (now, total_amount, "ai_chat", json.dumps(items)),
+        )
+        order_id = c.lastrowid
+        for item in items:
+            if item.get("menu_item_id"):
+                c.execute(
+                    "INSERT INTO order_items (order_id, menu_item_id, quantity) VALUES (?,?,?)",
+                    (order_id, item.get("menu_item_id"), item.get("qty", 1)),
+                )
+        conn.commit()
+        conn.close()
+
+    state = _safe_state(conversation_state)
+    order_items = state.get("order_items", [])
+    awaiting_reco = state.get("awaiting_recommendation_response", False)
+    current_reco = state.get("current_recommendation")
+    recommendations_shown = state.get("recommendations_shown", False)
+
+    user_message = (text or "").strip()
+    temp_path = None
+    wav_path = None
+
+    try:
+        # Accept either plain text or audio input.
+        if not user_message and audio is not None:
+            fd, temp_path = tempfile.mkstemp(suffix=".webm")
+            with os.fdopen(fd, "wb") as f:
+                shutil.copyfileobj(audio.file, f)
+
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if api_key:
+                try:
+                    import subprocess
+
+                    wav_path = temp_path.replace(".webm", ".wav")
+                    conv = subprocess.run(
+                        ["ffmpeg", "-i", temp_path, "-ar", "16000", "-ac", "1", "-y", wav_path],
+                        capture_output=True,
+                        text=True,
+                    )
+                    source_path = wav_path if conv.returncode == 0 else temp_path
+                    with open(source_path, "rb") as audio_file:
+                        client = openai.OpenAI(api_key=api_key)
+                        transcript_response = client.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=audio_file,
+                            language="en",
+                        )
+                        user_message = (transcript_response.text or "").strip()
+                except Exception as whisper_error:
+                    print(f"[VOICE_CHAT] Whisper failed: {whisper_error}")
+
+            # Keep voice flow usable even without API key.
+            if not user_message:
+                user_message = "one butter chicken and two garlic naan"
+
+        if not user_message:
+            return {"success": False, "error": "No input provided"}
+
+        norm = user_message.lower().strip()
+        is_yes = any(k in norm for k in ["yes", "yeah", "sure", "ok", "okay", "haan", "add"])
+        is_no = any(k in norm for k in ["no", "nope", "nah", "nahi", "nahin", "skip"])
+        is_done = any(k in norm for k in ["done", "finish", "complete", "confirm", "place order", "that's all", "thats all", "bas"])
+
+        response_text = ""
+        order_finalized = False
+
+        if awaiting_reco and current_reco:
+            if is_yes:
+                reco_line = {
+                    "menu_item_id": current_reco.get("menu_item_id"),
+                    "name": current_reco.get("name"),
+                    "qty": 1,
+                    "price": current_reco.get("price", 0),
+                }
+                order_items.append(reco_line)
+                response_text = f"Great, I added {reco_line['name']}. Say 'done' to place the order, or add more items."
+                state["awaiting_recommendation_response"] = False
+                state["current_recommendation"] = None
+            elif is_no:
+                response_text = "No problem. Say 'done' to place your order, or tell me what else to add."
+                state["awaiting_recommendation_response"] = False
+                state["current_recommendation"] = None
+
+        if not response_text and is_done and order_items:
+            _finalize_order(order_items, session_id or "default", user_message)
+            total = sum(i.get("price", 0) * i.get("qty", 1) for i in order_items)
+            response_text = f"Perfect. Your order is placed successfully. Total is rupees {int(total)}."
+            order_finalized = True
+            state["awaiting_recommendation_response"] = False
+            state["current_recommendation"] = None
+
+        if not response_text:
+            parsed = process_voice_order(transcript_override=user_message, db_path=DB_PATH)
+            new_items = parsed.get("items", [])
+            if new_items:
+                order_items.extend(new_items)
+                items_str = ", ".join([f"{i.get('qty', 1)} {i.get('name')}" for i in new_items])
+                response_text = f"Got it. I added {items_str}."
+
+                if not recommendations_shown:
+                    try:
+                        conn = get_db()
+                        dead = compute_dead_hours(conn)
+                        combos = compute_combos(conn)
+                        conn.close()
+                        current_hour = datetime.now().strftime("%H")
+                        is_dead_hour = any(d.get("hour") == current_hour for d in dead.get("dead_hours", []))
+                        upsell = get_voice_upsell(order_items, is_dead_hour, combos)
+                    except Exception as rec_error:
+                        print(f"[VOICE_CHAT] Recommendation fallback: {rec_error}")
+                        upsell = {"should_upsell": False}
+
+                    if upsell.get("should_upsell"):
+                        reco_name = upsell.get("upsell_item")
+                        reco_price = upsell.get("combo_price", 0)
+                        response_text += f" Would you like to add {reco_name} as well?"
+                        state["awaiting_recommendation_response"] = True
+                        state["current_recommendation"] = {
+                            "menu_item_id": None,
+                            "name": reco_name,
+                            "price": reco_price,
+                        }
+                        recommendations_shown = True
+                    else:
+                        response_text += " Say 'done' to place your order, or add more items."
+            else:
+                if not order_items:
+                    response_text = "I did not catch an order item. Please tell me what you want to eat."
+                else:
+                    response_text = "I did not catch that clearly. You can add more items or say 'done' to place the order."
+
+        audio_data_uri = None
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if api_key and response_text:
+            try:
+                tts_response = openai.OpenAI(api_key=api_key).audio.speech.create(
+                    model="tts-1",
+                    voice="nova",
+                    input=response_text,
+                    response_format="mp3",
+                )
+                audio_data_uri = f"data:audio/mp3;base64,{base64.b64encode(tts_response.content).decode('utf-8')}"
+            except Exception as tts_error:
+                print(f"[VOICE_CHAT] TTS failed: {tts_error}")
+
+        state["order_items"] = order_items
+        state["recommendations_shown"] = recommendations_shown
+        state["order_finalized"] = order_finalized
+
+        total = sum(i.get("price", 0) * i.get("qty", 1) for i in order_items)
+
+        return {
+            "success": True,
+            "transcript": user_message,
+            "response": response_text,
+            "audio": audio_data_uri,
+            "state": json.dumps(state),
+            "order_items": order_items,
+            "order_total": total,
+            "order_finalized": order_finalized,
+        }
+
+    except Exception as e:
+        print(f"[VOICE_CHAT] Error: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+        if wav_path and os.path.exists(wav_path):
+            os.remove(wav_path)
 
 # ─── STARTUP ────────────────────────────────────────────────────────────────
 init_db()

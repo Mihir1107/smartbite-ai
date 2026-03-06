@@ -1,0 +1,651 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+
+  /* PetPooja Design System Variables */
+  --pp-red: #da291c;
+  --pp-yellow: #ffc72c;
+  --pp-black: #1a1a1a;
+  --pp-white: #ffffff;
+  --pp-bg: #fff8f0;
+  --pp-gray: #666;
+  --pp-light-gray: #f5f5f5;
+  --pp-border: #e0e0e0;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+
+  /* PetPooja Dark Mode */
+  --pp-bg: #0a0a0a;
+  --pp-light-gray: #1a1a1a;
+  --pp-border: #333;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Hide Next.js error overlay portal */
+nextjs-portal {
+  display: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PetPooja Design System - Component Styles
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Background Patterns ─────────────────────────────────────────────────── */
+.arch-bg {
+  position: relative;
+}
+
+.arch-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(
+      circle at 20px 20px,
+      rgba(218, 41, 28, 0.03) 1px,
+      transparent 1px
+    ),
+    radial-gradient(
+      circle at 60px 60px,
+      rgba(255, 199, 44, 0.03) 1px,
+      transparent 1px
+    );
+  background-size:
+    80px 80px,
+    120px 120px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.arch-bg > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Button Styles ───────────────────────────────────────────────────────── */
+.pp-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--pp-red);
+  color: white;
+  font-weight: 700;
+  border-radius: 1rem;
+  border: 2px solid var(--pp-black);
+  box-shadow: 4px 4px 0px var(--pp-black);
+  transition: all 0.2s;
+}
+
+.pp-btn-primary:hover {
+  box-shadow: 2px 2px 0px var(--pp-black);
+  transform: translate(2px, 2px);
+}
+
+.pp-btn-primary:active {
+  transform: scale(0.96);
+}
+
+.pp-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pp-btn-yellow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--pp-yellow);
+  color: var(--pp-black);
+  font-weight: 700;
+  border-radius: 1rem;
+  border: 2px solid var(--pp-black);
+  box-shadow: 4px 4px 0px var(--pp-black);
+  transition: all 0.2s;
+}
+
+.pp-btn-yellow:hover {
+  box-shadow: 2px 2px 0px var(--pp-black);
+  transform: translate(2px, 2px);
+}
+
+.pp-btn-yellow:active {
+  transform: scale(0.96);
+}
+
+.pp-btn-yellow:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pp-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: transparent;
+  color: var(--pp-black);
+  font-weight: 700;
+  border-radius: 1rem;
+  border: 2px solid var(--pp-black);
+  transition: all 0.2s;
+}
+
+.dark .pp-btn-ghost {
+  color: white;
+  border-color: white;
+}
+
+.pp-btn-ghost:hover {
+  background-color: var(--pp-black);
+  color: white;
+}
+
+.dark .pp-btn-ghost:hover {
+  background-color: white;
+  color: var(--pp-black);
+}
+
+.pp-btn-ghost:active {
+  transform: scale(0.96);
+}
+
+.pp-btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pp-btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: #dc2626;
+  color: white;
+  font-weight: 700;
+  border-radius: 1rem;
+  border: 2px solid var(--pp-black);
+  box-shadow: 4px 4px 0px var(--pp-black);
+  transition: all 0.2s;
+}
+
+.pp-btn-danger:hover {
+  box-shadow: 2px 2px 0px var(--pp-black);
+  transform: translate(2px, 2px);
+}
+
+.pp-btn-danger:active {
+  transform: scale(0.96);
+}
+
+.pp-btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pp-btn-disabled {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background-color: #d1d5db;
+  color: #6b7280;
+  font-weight: 700;
+  border-radius: 1rem;
+  border: 2px solid #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dark .pp-btn-disabled {
+  background-color: #374151;
+  color: #9ca3af;
+  border-color: #4b5563;
+}
+
+.pp-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  background-color: var(--pp-red);
+  color: white;
+  border-radius: 0.75rem;
+  border: 2px solid var(--pp-black);
+  box-shadow: 3px 3px 0px var(--pp-black);
+  transition: all 0.2s;
+}
+
+.pp-btn-icon:hover {
+  box-shadow: 1px 1px 0px var(--pp-black);
+  transform: translate(2px, 2px);
+}
+
+.pp-btn-icon:active {
+  transform: scale(0.96);
+}
+
+.pp-btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Card Styles ─────────────────────────────────────────────────────────── */
+.pp-card {
+  background-color: white;
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  transition: all 0.2s;
+}
+
+.dark .pp-card {
+  background-color: #2a2a2a;
+}
+
+.pp-card--hover {
+  background-color: white;
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.dark .pp-card--hover {
+  background-color: #2a2a2a;
+}
+
+.pp-card--hover:hover {
+  box-shadow: 6px 6px 0px var(--pp-black);
+  transform: translate(-2px, -2px);
+}
+
+.pp-card--shadow {
+  background-color: white;
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  transition: all 0.2s;
+  box-shadow: 4px 4px 0px var(--pp-black);
+}
+
+.dark .pp-card--shadow {
+  background-color: #2a2a2a;
+}
+
+/* ─── Label & Badge Styles ────────────────────────────────────────────────── */
+.showcase-label {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--pp-black);
+  margin-bottom: 1rem;
+  font-family: "Fredoka One", cursive;
+}
+
+.dark .showcase-label {
+  color: white;
+}
+
+.pp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 2px solid var(--pp-black);
+}
+
+.pp-badge--red {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 2px solid var(--pp-black);
+  background-color: var(--pp-red);
+  color: white;
+}
+
+.pp-badge--yellow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 2px solid var(--pp-black);
+  background-color: var(--pp-yellow);
+  color: var(--pp-black);
+}
+
+.pp-badge--green {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 2px solid var(--pp-black);
+  background-color: #22c55e;
+  color: white;
+}
+
+/* ─── Input Styles ────────────────────────────────────────────────────────── */
+.pp-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 2px solid var(--pp-border);
+  background-color: white;
+  color: var(--pp-black);
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.dark .pp-input {
+  border-color: #444;
+  background-color: #1a1a1a;
+  color: white;
+}
+
+.pp-input:focus {
+  outline: none;
+  border-color: var(--pp-red);
+  box-shadow: 0 0 0 3px rgba(218, 41, 28, 0.2);
+}
+
+.pp-textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 2px solid var(--pp-border);
+  background-color: white;
+  color: var(--pp-black);
+  font-weight: 500;
+  transition: all 0.2s;
+  resize: none;
+  min-height: 100px;
+}
+
+.dark .pp-textarea {
+  border-color: #444;
+  background-color: #1a1a1a;
+  color: white;
+}
+
+.pp-textarea:focus {
+  outline: none;
+  border-color: var(--pp-red);
+  box-shadow: 0 0 0 3px rgba(218, 41, 28, 0.2);
+}
+
+/* ─── Animation Utilities ──────────────────────────────────────────────────── */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes pulse-shadow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(218, 41, 28, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(218, 41, 28, 0);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-shadow {
+  animation: pulse-shadow 2s ease-in-out infinite;
+}
+
+/* ─── Status Colors ────────────────────────────────────────────────────────── */
+.status-success {
+  color: #16a34a;
+}
+
+.dark .status-success {
+  color: #4ade80;
+}
+
+.status-warning {
+  color: #ca8a04;
+}
+
+.dark .status-warning {
+  color: #facc15;
+}
+
+.status-error {
+  color: #dc2626;
+}
+
+.dark .status-error {
+  color: #f87171;
+}
+
+.status-info {
+  color: #2563eb;
+}
+
+.dark .status-info {
+  color: #60a5fa;
+}
+
+/* ─── Typography ───────────────────────────────────────────────────────────── */
+.text-display {
+  font-family: "Fredoka One", cursive;
+  font-weight: 900;
+}
+
+.text-body {
+  font-family: "DM Sans", sans-serif;
+}
+
+/* ─── Scrollbar Styling ────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--pp-light-gray);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--pp-red);
+  border-radius: 10px;
+  border: 2px solid var(--pp-light-gray);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b82318;
+}
+
+/* ─── Loading States ───────────────────────────────────────────────────────── */
+.loading-skeleton {
+  background-color: #e5e7eb;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  border-radius: 0.75rem;
+}
+
+.dark .loading-skeleton {
+  background-color: #374151;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid var(--pp-red);
+  border-top-color: transparent;
+  border-radius: 9999px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ─── Responsive Utilities ─────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .pp-btn-primary,
+  .pp-btn-yellow,
+  .pp-btn-ghost,
+  .pp-btn-danger {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+
+  .pp-card {
+    padding: 1rem;
+    border-radius: 1rem;
+  }
+
+  .showcase-label {
+    font-size: 1.125rem;
+  }
+}

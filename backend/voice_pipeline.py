@@ -247,6 +247,201 @@ def get_voice_upsell(items: list, dead_hour_active: bool, combos: list) -> dict:
     return {"should_upsell": False}
 
 
+# ─── INTELLIGENT RECOMMENDATION SYSTEM ──────────────────────────────────────
+
+def get_smart_recommendations(items: list, menu: list, db_path: str = "smartbite.db") -> dict:
+    """
+    Advanced recommendation engine based on:
+    1. Category analysis (curries need bread/rice)
+    2. Popular item pairings from order history
+    3. Meal completeness (missing drinks, sides, desserts)
+    4. Price-based upselling (suggest premium alternatives)
+    """
+    if not items:
+        return {"has_recommendations": False, "recommendations": []}
+    
+    ordered_names = {item["name"].lower() for item in items}
+    ordered_categories = set()
+    
+    # Analyze what's already ordered
+    conn = sqlite3.connect(db_path)
+    for item in items:
+        category_row = conn.execute(
+            "SELECT category FROM menu_items WHERE id=?", 
+            (item["menu_item_id"],)
+        ).fetchone()
+        if category_row:
+            ordered_categories.add(category_row[0].lower())
+    
+    recommendations = []
+    
+    # Rule 1: Complementary Categories
+    category_pairs = {
+        "curries": ["breads", "rice", "beverages"],
+        "biryani": ["raita", "beverages", "starters"],
+        "breads": ["curries", "starters"],
+        "starters": ["main course", "beverages"],
+        "chinese": ["beverages", "starters"]
+    }
+    
+    for ordered_cat in ordered_categories:
+        if ordered_cat in category_pairs:
+            for suggested_cat in category_pairs[ordered_cat]:
+                if suggested_cat not in ordered_categories:
+                    # Find popular item from this category
+                    popular_item = conn.execute("""
+                        SELECT m.id, m.name, m.selling_price, m.category
+                        FROM menu_items m
+                        WHERE LOWER(m.category) = ? AND m.is_active = 1
+                        ORDER BY m.selling_price ASC
+                        LIMIT 1
+                    """, (suggested_cat.lower(),)).fetchone()
+                    
+                    if popular_item:
+                        recommendations.append({
+                            "menu_item_id": popular_item[0],
+                            "name": popular_item[1],
+                            "price": popular_item[2],
+                            "category": popular_item[3],
+                            "reason": f"Pairs perfectly with your {ordered_cat}",
+                            "priority": 1
+                        })
+    
+    # Rule 2: Missing Drink (high priority)
+    has_beverage = any("beverage" in cat or "drink" in cat for cat in ordered_categories)
+    if not has_beverage:
+        drink = conn.execute("""
+            SELECT m.id, m.name, m.selling_price, m.category
+            FROM menu_items m
+            WHERE LOWER(m.category) LIKE '%beverage%' AND m.is_active = 1
+            ORDER BY m.selling_price ASC
+            LIMIT 1
+        """).fetchone()
+        
+        if drink:
+            recommendations.append({
+                "menu_item_id": drink[0],
+                "name": drink[1],
+                "price": drink[2],
+                "category": drink[3],
+                "reason": "Refresh yourself with a drink!",
+                "priority": 2
+            })
+    
+    # Rule 3: Popular Pairings from Order History
+    for item in items:
+        # Find items frequently ordered together
+        paired_items = conn.execute("""
+            SELECT m.id, m.name, m.selling_price, m.category, COUNT(*) as frequency
+            FROM voice_orders vo
+            JOIN menu_items m ON json_extract(vo.structured_order, '$') LIKE '%' || m.name || '%'
+            WHERE vo.structured_order LIKE ?
+            AND m.name NOT IN ({})
+            AND m.is_active = 1
+            GROUP BY m.id
+            ORDER BY frequency DESC
+            LIMIT 2
+        """.format(','.join('?' * len(ordered_names))), 
+        (f'%{item["name"]}%', *ordered_names)).fetchall()
+        
+        for paired in paired_items:
+            if not any(r["menu_item_id"] == paired[0] for r in recommendations):
+                recommendations.append({
+                    "menu_item_id": paired[0],
+                    "name": paired[1],
+                    "price": paired[2],
+                    "category": paired[3],
+                    "reason": f"Often ordered with {item['name']}",
+                    "priority": 3
+                })
+    
+    # Rule 4: Dessert Suggestion (low priority)
+    has_dessert = any("dessert" in cat or "sweet" in cat for cat in ordered_categories)
+    if not has_dessert and len(items) >= 2:  # Only suggest dessert if ordering multiple items
+        dessert = conn.execute("""
+            SELECT m.id, m.name, m.selling_price, m.category
+            FROM menu_items m
+            WHERE LOWER(m.category) LIKE '%dessert%' AND m.is_active = 1
+            ORDER BY m.selling_price ASC
+            LIMIT 1
+        """).fetchone()
+        
+        if dessert:
+            recommendations.append({
+                "menu_item_id": dessert[0],
+                "name": dessert[1],
+                "price": dessert[2],
+                "category": dessert[3],
+                "reason": "Complete your meal with something sweet!",
+                "priority": 4
+            })
+    
+    conn.close()
+    
+    # Sort by priority and limit to top 3
+    recommendations.sort(key=lambda x: x["priority"])
+    recommendations = recommendations[:3]
+    
+    return {
+        "has_recommendations": len(recommendations) > 0,
+        "recommendations": recommendations,
+        "count": len(recommendations)
+    }
+
+
+# ─── CONVERSATIONAL AI AGENT ────────────────────────────────────────────────
+
+def generate_conversation_response(
+    user_message: str,
+    conversation_history: list,
+    current_order: list,
+    recommendations: list = None
+) -> str:
+    """
+    Use OpenAI GPT to generate natural, context-aware responses.
+    Handles: greetings, order taking, clarifications, recommendations
+    """
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return "I'm here to take your order! What would you like to eat today?"
+    
+    import openai
+    client = openai.OpenAI(api_key=api_key)
+    
+    # Build system prompt
+    system_prompt = """You are SmartBite AI, a friendly restaurant ordering assistant. 
+Your role is to:
+1. Take food orders naturally and conversationally
+2. Confirm orders clearly
+3. Suggest relevant recommendations when appropriate
+4. Be warm, helpful, and concise
+
+Current order: {}
+Available recommendations: {}
+
+Keep responses under 40 words. Use a friendly, casual Indian English tone.""".format(
+        ", ".join([f"{item['qty']}x {item['name']}" for item in current_order]) if current_order else "Nothing ordered yet",
+        ", ".join([r['name'] for r in recommendations]) if recommendations else "None"
+    )
+    
+    # Build messages
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(conversation_history)
+    messages.append({"role": "user", "content": user_message})
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=messages,
+            max_tokens=100,
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[AI] GPT Error: {e}")
+        return "I'm having trouble understanding. Could you please repeat your order?"
+
+
 # ─── TEST ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
