@@ -18,6 +18,13 @@ load_dotenv()
 
 app = FastAPI(title="SmartBite AI API", version="1.0.0")
 
+# Fallback demo credentials used when MongoDB is unavailable.
+# This keeps hackathon demos functional even if managed DB is not configured yet.
+FALLBACK_DEMO_USERS = {
+    "owner": {"password": "owner123", "role": "owner"},
+    "customer": {"password": "customer123", "role": "user"},
+}
+
 extra_cors_origins = [
     origin.strip()
     for origin in os.getenv("CORS_ORIGINS", "").split(",")
@@ -488,7 +495,25 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     """Login and get access token"""
     db = get_database()
     if db is None:
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        demo_user = FALLBACK_DEMO_USERS.get(form_data.username)
+        if not demo_user or demo_user["password"] != form_data.password:
+            raise HTTPException(
+                status_code=401,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": form_data.username, "role": demo_user["role"]},
+            expires_delta=access_token_expires,
+        )
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            role=demo_user["role"],
+            username=form_data.username,
+        )
     
     user = await authenticate_user(db, form_data.username, form_data.password)
     if not user:
