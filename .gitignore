@@ -1,7 +1,28 @@
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+
+# Python
 .env
 .venv/
+venv/
 __pycache__/
 *.pyc
+*.pyo
+
+# Local data
 smartbite.db
+*.db
+
+# Node / Frontend
 node_modules/
-.DS_Store
+dist/
+.next/
+out/
+coverage/
+
+# Logs and temp
+*.log
+*.tmp
+*.bak
