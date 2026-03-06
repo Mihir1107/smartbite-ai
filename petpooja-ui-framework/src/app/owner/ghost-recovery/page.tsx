@@ -19,6 +19,8 @@ import {
   SectionTitle,
   Footer,
 } from "@/components/shared";
+import { formatSmartTimestamp } from "@/lib/time";
+import type { DashboardSummary } from "@/lib/types";
 
 export default function GhostRecoveryPage() {
   const { data: missedCallsData } = usePollableFetch<MissedCallsResponse>(
@@ -26,6 +28,29 @@ export default function GhostRecoveryPage() {
     { missed_calls: [] },
     10000,
   );
+  const { data: summaryData } = usePollableFetch<DashboardSummary>(
+    "/api/dashboard/summary",
+    {
+      total_revenue_30d: 0,
+      total_margin_30d: 0,
+      margin_pct: 0,
+      aov_7d: 0,
+      total_orders_7d: 0,
+      voice_orders: 0,
+      stars: 0,
+      dogs: 0,
+      puzzles: 0,
+      plowhorses: 0,
+      missed_calls: 0,
+      opportunity_score_total: 0,
+    },
+    10000,
+  );
+
+  const totalCalls = missedCallsData?.missed_calls?.length || 0;
+  const recoveredCalls =
+    missedCallsData?.missed_calls?.filter((call) => call.recovered).length || 0;
+  const recoveryRate = totalCalls ? (recoveredCalls / totalCalls) * 100 : 0;
 
   const handleCallback = async (phoneNumber: string) => {
     alert(`Initiating callback to ${phoneNumber}`);
@@ -92,7 +117,7 @@ export default function GhostRecoveryPage() {
                                 {call.phone}
                               </p>
                               <p className="text-xs text-[#888]">
-                                {call.timestamp}
+                                {formatSmartTimestamp(call.timestamp)}
                               </p>
                             </div>
                           </div>
@@ -101,7 +126,7 @@ export default function GhostRecoveryPage() {
                               className={`px-2 py-1 rounded-lg font-bold ${
                                 call.recovered
                                   ? "bg-green-100 text-green-700"
-                                  : "bg-orange-100 text-orange-700"
+                                  : "bg-[#FFC72C]/30 text-[#7a5900]"
                               }`}
                             >
                               {call.recovered ? "Recovered" : "Pending"}
@@ -145,21 +170,21 @@ export default function GhostRecoveryPage() {
               {[
                 {
                   label: "Recovery Rate",
-                  value: "68%",
+                  value: `${recoveryRate.toFixed(1)}%`,
                   icon: <TrendingUp className="w-6 h-6" />,
-                  color: "bg-green-100 text-green-700 border-green-200",
+                  color: "bg-red-100 text-[#DA291C] border-red-200",
                 },
                 {
                   label: "Avg. Revenue Recovered",
-                  value: "₹847",
+                  value: `₹${Math.round(summaryData.aov_7d || 0)}`,
                   icon: <DollarSign className="w-6 h-6" />,
-                  color: "bg-blue-100 text-blue-700 border-blue-200",
+                  color: "bg-[#FFC72C]/25 text-[#7a5900] border-[#FFC72C]",
                 },
                 {
-                  label: "Callback Response Time",
-                  value: "4.2 min",
+                  label: "Avg Response Time",
+                  value: "< 5 min",
                   icon: <Clock className="w-6 h-6" />,
-                  color: "bg-purple-100 text-purple-700 border-purple-200",
+                  color: "bg-[#FFC72C]/25 text-[#7a5900] border-[#FFC72C]",
                 },
               ].map((stat, i) => (
                 <motion.div

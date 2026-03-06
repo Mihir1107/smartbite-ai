@@ -131,7 +131,7 @@ export default function VoiceCallAssistant({ onOrderUpdate }: Props) {
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={startCall}
-            className="flex-1 py-3 rounded-xl bg-green-600 text-white font-black border-2 border-[#1A1A1A] flex items-center justify-center gap-2"
+            className="flex-1 py-3 rounded-xl bg-[#DA291C] text-white font-black border-2 border-[#1A1A1A] flex items-center justify-center gap-2"
           >
             <Phone className="w-4 h-4" /> Start Call
           </motion.button>
@@ -149,7 +149,7 @@ export default function VoiceCallAssistant({ onOrderUpdate }: Props) {
           whileTap={{ scale: 0.98 }}
           disabled={!inCall || isProcessing}
           onClick={isRecording ? stopTurnRecording : beginTurnRecording}
-          className="flex-1 py-3 rounded-xl bg-[#FF4500] text-white font-black border-2 border-[#1A1A1A] flex items-center justify-center gap-2 disabled:opacity-50"
+          className="flex-1 py-3 rounded-xl bg-[#DA291C] text-white font-black border-2 border-[#1A1A1A] flex items-center justify-center gap-2 disabled:opacity-50"
         >
           {isProcessing ? (
             <>

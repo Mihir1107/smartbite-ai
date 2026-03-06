@@ -82,7 +82,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#FF4500] via-[#FD5602] to-[#FF6B35] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#DA291C] via-[#DA291C] to-[#DA291C] flex items-center justify-center p-4">
       {/* Background Pattern */}
       <div className="absolute inset-0 opacity-10">
         <div
@@ -107,7 +107,7 @@ export default function LoginPage() {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
-              className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#FF4500] mb-4"
+              className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#DA291C] mb-4"
             >
               <UtensilsCrossed className="w-10 h-10 text-white" />
             </motion.div>
@@ -147,7 +147,7 @@ export default function LoginPage() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-[#ccc] rounded-xl focus:border-[#FF4500] focus:bg-white focus:outline-none transition-all text-gray-800 font-medium"
+                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-[#ccc] rounded-xl focus:border-[#DA291C] focus:bg-white focus:outline-none transition-all text-gray-800 font-medium"
                   placeholder="Enter username"
                   required
                   disabled={loading}
@@ -166,7 +166,7 @@ export default function LoginPage() {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-[#ccc] rounded-xl focus:border-[#FF4500] focus:bg-white focus:outline-none transition-all text-gray-800 font-medium"
+                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border-2 border-[#ccc] rounded-xl focus:border-[#DA291C] focus:bg-white focus:outline-none transition-all text-gray-800 font-medium"
                   placeholder="Enter password"
                   required
                   disabled={loading}
@@ -178,7 +178,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#FF4500] hover:bg-[#E63E00] text-white font-black py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg shadow-lg hover:shadow-xl"
+              className="w-full bg-[#DA291C] hover:bg-[#9B1C1C] text-white font-black py-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg shadow-lg hover:shadow-xl"
               style={{ fontFamily: "Fredoka One" }}
             >
               {loading ? (
@@ -201,14 +201,14 @@ export default function LoginPage() {
               <button
                 onClick={() => handleDemoLogin("owner")}
                 disabled={loading}
-                className="py-3 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl transition-all disabled:opacity-50 border-2 border-purple-200"
+                className="py-3 px-4 bg-[#DA291C] hover:bg-[#9B1C1C] text-white font-bold rounded-xl transition-all disabled:opacity-50 border-2 border-[#1A1A1A]"
               >
                 👨‍💼 Owner
               </button>
               <button
                 onClick={() => handleDemoLogin("user")}
                 disabled={loading}
-                className="py-3 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-xl transition-all disabled:opacity-50 border-2 border-blue-200"
+                className="py-3 px-4 bg-[#FFC72C] hover:bg-[#eab225] text-[#1A1A1A] font-bold rounded-xl transition-all disabled:opacity-50 border-2 border-[#1A1A1A]"
               >
                 👤 Customer
               </button>

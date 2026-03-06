@@ -125,7 +125,7 @@ export default function MenuOrderPanel({ onOrderPlaced }: Props) {
         >
           Browse Menu
         </h3>
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-orange-100 border border-orange-300 text-sm font-bold text-orange-700">
+        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-red-100 border border-red-300 text-sm font-bold text-[#DA291C]">
           <ShoppingCart className="w-4 h-4" />
           {cartItems.length} item(s)
         </div>
@@ -138,7 +138,7 @@ export default function MenuOrderPanel({ onOrderPlaced }: Props) {
             onClick={() => setActiveCategory(category)}
             className={`px-3 py-1 rounded-full text-sm font-bold border ${
               activeCategory === category
-                ? "bg-[#FF4500] text-white border-[#1A1A1A]"
+                ? "bg-[#DA291C] text-white border-[#1A1A1A]"
                 : "bg-white text-gray-700 border-gray-300"
             }`}
           >
@@ -165,7 +165,7 @@ export default function MenuOrderPanel({ onOrderPlaced }: Props) {
                     </p>
                     <p className="text-xs text-gray-500">{item.category}</p>
                   </div>
-                  <p className="font-black text-[#FF4500]">
+                  <p className="font-black text-[#DA291C]">
                     ₹{item.selling_price}
                   </p>
                 </div>
@@ -180,7 +180,7 @@ export default function MenuOrderPanel({ onOrderPlaced }: Props) {
                     <span className="font-bold min-w-6 text-center">{qty}</span>
                     <button
                       onClick={() => updateQty(item, 1)}
-                      className="w-7 h-7 rounded-full bg-[#FF4500] text-white border border-[#1A1A1A] flex items-center justify-center"
+                      className="w-7 h-7 rounded-full bg-[#DA291C] text-white border border-[#1A1A1A] flex items-center justify-center"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -201,14 +201,14 @@ export default function MenuOrderPanel({ onOrderPlaced }: Props) {
           whileTap={{ scale: 0.98 }}
           disabled={!cartItems.length || placingOrder}
           onClick={placeDirectOrder}
-          className="w-full py-3 rounded-xl font-black border-2 border-[#1A1A1A] bg-gradient-to-r from-[#FF4500] to-[#FD5602] text-white disabled:opacity-50"
+          className="w-full py-3 rounded-xl font-black border-2 border-[#1A1A1A] bg-[#DA291C] text-white disabled:opacity-50"
           style={{ fontFamily: "Fredoka One" }}
         >
           {placingOrder ? "Placing..." : "Place Menu Order"}
         </motion.button>
 
         {orderSuccess && (
-          <div className="mt-3 text-sm font-medium text-green-700 bg-green-100 border border-green-300 rounded-lg p-2 flex items-center gap-2">
+          <div className="mt-3 text-sm font-medium text-[#DA291C] bg-red-100 border border-red-300 rounded-lg p-2 flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4" />
             {orderSuccess}
           </div>

@@ -96,15 +96,110 @@ def init_db():
         upsell_shown TEXT,
         upsell_accepted INTEGER DEFAULT 0,
         created_at TEXT,
-        status TEXT DEFAULT 'pending'
+        status TEXT DEFAULT 'pending',
+        total_amount REAL DEFAULT 0,
+        updated_at TEXT
     );
     """)
     conn.commit()
 
+    # Auto-add columns if missing (existing databases)
+    try:
+        c.execute("ALTER TABLE voice_orders ADD COLUMN total_amount REAL DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE voice_orders ADD COLUMN updated_at TEXT")
+        conn.commit()
+    except Exception:
+        pass
+
     # Seed only if empty
     if c.execute("SELECT COUNT(*) FROM menu_items").fetchone()[0] == 0:
         seed_data(conn)
+
+    # Auto-fix legacy synthetic datasets where all margins are flattened (for example 60% on every item).
+    normalize_flat_margin_data(conn)
     conn.close()
+
+
+def _deterministic_ratio(seed_text: str, min_value: float, max_value: float) -> float:
+    """Generate a stable ratio in [min_value, max_value] from item text.
+
+    Keeps values deterministic between runs while still varying by item.
+    """
+    spread = max_value - min_value
+    if spread <= 0:
+        return min_value
+    seed_score = sum(ord(ch) for ch in seed_text) % 1000
+    return min_value + (seed_score / 999.0) * spread
+
+
+def normalize_flat_margin_data(conn):
+    """Backfill food_cost when synthetic data creates near-identical margins for all items.
+
+    This keeps /api/menu/analytics item-level cm_percentage meaningful.
+    """
+    c = conn.cursor()
+    items = c.execute(
+        "SELECT id, name, category, selling_price, food_cost FROM menu_items WHERE is_active=1"
+    ).fetchall()
+    if len(items) < 3:
+        return
+
+    cm_values = []
+    for item in items:
+        price = float(item["selling_price"] or 0)
+        cost = float(item["food_cost"] or 0)
+        if price <= 0:
+            continue
+        cm_values.append(round(((price - cost) / price) * 100, 1))
+
+    if not cm_values:
+        return
+
+    rounded_unique = set(cm_values)
+    all_near_sixty = all(abs(v - 60.0) <= 0.2 for v in cm_values)
+    looks_flat = len(rounded_unique) <= 2 and all_near_sixty
+    if not looks_flat:
+        return
+
+    category_margin_ranges = {
+        "starter": (50.0, 64.0),
+        "starters": (50.0, 64.0),
+        "main course": (54.0, 70.0),
+        "curries": (54.0, 70.0),
+        "rice": (46.0, 60.0),
+        "biryani": (46.0, 60.0),
+        "bread": (58.0, 75.0),
+        "breads": (58.0, 75.0),
+        "beverage": (60.0, 82.0),
+        "beverages": (60.0, 82.0),
+        "dessert": (55.0, 72.0),
+        "desserts": (55.0, 72.0),
+        "sides": (50.0, 66.0),
+        "chinese": (48.0, 65.0),
+    }
+
+    for item in items:
+        price = float(item["selling_price"] or 0)
+        if price <= 0:
+            continue
+
+        category = str(item["category"] or "").strip().lower()
+        min_margin, max_margin = category_margin_ranges.get(category, (50.0, 68.0))
+        target_margin = _deterministic_ratio(
+            f"{item['name']}::{category}",
+            min_margin,
+            max_margin,
+        )
+        target_margin = max(35.0, min(85.0, target_margin))
+
+        new_cost = round(price * (1 - (target_margin / 100.0)), 2)
+        c.execute("UPDATE menu_items SET food_cost=? WHERE id=?", (new_cost, item["id"]))
+
+    conn.commit()
 
 def seed_data(conn):
     c = conn.cursor()
@@ -231,7 +326,8 @@ def compute_menu_analytics(conn):
     max_units = max(all_units) if all_units else 1
 
     for r in results:
-        high_pop = r["units_sold"] >= median_units
+        # When median is 0 (no orders yet), use strict > so zero-sales items are NOT high-pop
+        high_pop = r["units_sold"] > median_units if median_units == 0 else r["units_sold"] >= median_units
         high_cm = r["contribution_margin"] >= median_cm
 
         if high_pop and high_cm:
@@ -487,10 +583,15 @@ def apply_menu_action(item_id: int, action: dict):
     """One-click price/combo action from dashboard"""
     conn = get_db()
     c = conn.cursor()
-    action_type = action.get("type")
+    action_type = action.get("action") or action.get("type")
     
     if action_type == "raise_price":
         new_price = action.get("new_price")
+        if not new_price:
+            # Auto-compute 12% increase if no explicit price given
+            row = c.execute("SELECT selling_price FROM menu_items WHERE id=?", (item_id,)).fetchone()
+            if row:
+                new_price = round(row["selling_price"] * 1.12)
         c.execute("UPDATE menu_items SET selling_price=? WHERE id=?", (new_price, item_id))
         conn.commit()
         conn.close()
@@ -583,9 +684,58 @@ def decide_recommendation(item_id: int, decision: dict):
 def voice_orders():
     conn = get_db()
     c = conn.cursor()
-    rows = c.execute("SELECT * FROM voice_orders ORDER BY created_at DESC LIMIT 20").fetchall()
+    rows = c.execute("SELECT * FROM voice_orders ORDER BY created_at DESC LIMIT 50").fetchall()
     conn.close()
     return {"orders": [dict(r) for r in rows]}
+
+
+@app.get("/api/orders/live")
+def live_orders():
+    """Return recent orders with parsed items and live status for real-time tracking"""
+    conn = get_db()
+    c = conn.cursor()
+    rows = c.execute(
+        "SELECT id, phone, transcript, structured_order, created_at, status, total_amount, updated_at "
+        "FROM voice_orders ORDER BY created_at DESC LIMIT 50"
+    ).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["items"] = json.loads(d.get("structured_order") or "[]")
+        except Exception:
+            d["items"] = []
+        d["total_amount"] = d.get("total_amount") or sum(
+            it.get("price", 0) * it.get("qty", 1) for it in d["items"]
+        )
+        result.append(d)
+    return {"orders": result}
+
+
+@app.patch("/api/orders/{order_id}/status")
+def update_order_status(order_id: int, body: dict):
+    """Update the status of a voice order"""
+    new_status = body.get("status", "")
+    valid = {"pending", "confirmed", "preparing", "ready", "delivered", "rejected"}
+    if new_status not in valid:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(sorted(valid))}")
+    conn = get_db()
+    c = conn.cursor()
+    now = datetime.now().isoformat()
+    c.execute("UPDATE voice_orders SET status=?, updated_at=? WHERE id=?", (new_status, now, order_id))
+    if c.rowcount == 0:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Order not found")
+    conn.commit()
+    row = c.execute("SELECT * FROM voice_orders WHERE id=?", (order_id,)).fetchone()
+    conn.close()
+    d = dict(row)
+    try:
+        d["items"] = json.loads(d.get("structured_order") or "[]")
+    except Exception:
+        d["items"] = []
+    return {"success": True, "order": d}
 
 @app.delete("/api/voice/orders")
 def clear_voice_orders():
@@ -603,19 +753,36 @@ def create_voice_order(order: dict):
     conn = get_db()
     c = conn.cursor()
     now = datetime.now().isoformat()
+    total = sum(i.get("price", 0) * i.get("qty", 1) for i in order.get("items", []))
+    # Attach modifiers to structured order items for KOT / kitchen display
+    items_with_mods = order.get("items", [])
+    modifiers = order.get("modifiers", {})
+    if modifiers:
+        for it in items_with_mods:
+            it["modifiers"] = modifiers
     c.execute(
-        "INSERT INTO voice_orders (phone, transcript, structured_order, upsell_shown, created_at, status) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO voice_orders (phone, transcript, structured_order, upsell_shown, created_at, status, total_amount, updated_at) VALUES (?,?,?,?,?,?,?,?)",
         (order.get("phone", "unknown"), order.get("transcript", ""),
-         json.dumps(order.get("items", [])), json.dumps(order.get("upsell", {})), now, "confirmed")
+         json.dumps(items_with_mods), json.dumps(order.get("upsell", {})), now, "pending", total, now)
     )
     
     # Also add to main orders table for analytics
-    total = sum(i.get("price", 0) * i.get("qty", 1) for i in order.get("items", []))
-    order_id = c.lastrowid
+    voice_order_id = c.lastrowid
     c.execute("INSERT INTO orders (order_time, total_amount, source) VALUES (?,?,?)", (now, total, "voice"))
+    main_order_id = c.lastrowid
+
+    # Populate order_items so revenue analytics pick up these sales
+    menu_rows = c.execute("SELECT id, name FROM menu_items WHERE is_active=1").fetchall()
+    name_to_id = {r["name"].lower(): r["id"] for r in menu_rows}
+    for it in order.get("items", []):
+        mid = name_to_id.get((it.get("name") or "").lower())
+        if mid:
+            c.execute("INSERT INTO order_items (order_id, menu_item_id, quantity) VALUES (?,?,?)",
+                      (main_order_id, mid, it.get("qty", 1)))
+
     conn.commit()
     conn.close()
-    return {"success": True, "order_id": order_id}
+    return {"success": True, "order_id": voice_order_id, "total": total}
 
 @app.get("/api/voice/upsell/{item_id}")
 def get_upsell_for_item(item_id: int):
@@ -705,17 +872,34 @@ def voice_demo_endpoint(req: VoiceDemoRequest):
     # 3. Save to database so dashboard updates
     c = conn.cursor()
     now = datetime.now().isoformat()
+    total = sum(i.get("price", 0) * i.get("qty", 1) for i in result.get("items", []))
+    # Attach modifiers to items for KOT / kitchen display
+    items_data = result.get("items", [])
+    modifiers = result.get("modifiers", {})
+    if modifiers:
+        for it in items_data:
+            it["modifiers"] = modifiers
     # Insert Voice Order
     c.execute(
-        "INSERT INTO voice_orders (phone, transcript, structured_order, upsell_shown, created_at, status) VALUES (?,?,?,?,?,?)",
+        "INSERT INTO voice_orders (phone, transcript, structured_order, upsell_shown, created_at, status, total_amount, updated_at) VALUES (?,?,?,?,?,?,?,?)",
         ("+919999999999", req.transcript,
-         json.dumps(result.get("items", [])), json.dumps(upsell), now, "confirmed")
+         json.dumps(items_data), json.dumps(upsell), now, "pending", total, now)
     )
     
     # Insert main Order
-    total = sum(i.get("price", 0) * i.get("qty", 1) for i in result.get("items", []))
-    order_id = c.lastrowid
+    voice_order_id = c.lastrowid
     c.execute("INSERT INTO orders (order_time, total_amount, source) VALUES (?,?,?)", (now, total, "voice"))
+    main_order_id = c.lastrowid
+
+    # Populate order_items so revenue analytics pick up these sales
+    menu_rows = c.execute("SELECT id, name FROM menu_items WHERE is_active=1").fetchall()
+    name_to_id = {r["name"].lower(): r["id"] for r in menu_rows}
+    for it in result.get("items", []):
+        mid = name_to_id.get((it.get("name") or "").lower())
+        if mid:
+            c.execute("INSERT INTO order_items (order_id, menu_item_id, quantity) VALUES (?,?,?)",
+                      (main_order_id, mid, it.get("qty", 1)))
+
     conn.commit()
     conn.close()
     
@@ -724,11 +908,294 @@ def voice_demo_endpoint(req: VoiceDemoRequest):
         "success": True,
         "transcript": result.get("transcript", ""),
         "items": result.get("items", []),
+        "modifiers": result.get("modifiers", {}),
         "total": result.get("total", 0),
         "summary": result.get("summary", ""),
         "confidence": result.get("confidence", ""),
         "upsell": upsell
     }
+
+
+# ─── KOT (Kitchen Order Ticket) GENERATION ──────────────────────────────
+
+@app.get("/api/orders/{order_id}/kot")
+def generate_kot(order_id: int):
+    """Generate a Kitchen Order Ticket for a given voice order — PoS integration ready."""
+    conn = get_db()
+    c = conn.cursor()
+    row = c.execute(
+        "SELECT id, phone, transcript, structured_order, created_at, status, total_amount FROM voice_orders WHERE id=?",
+        (order_id,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    items = json.loads(row["structured_order"] or "[]")
+    kot = {
+        "kot_number": f"KOT-{row['id']:04d}",
+        "order_id": row["id"],
+        "timestamp": row["created_at"],
+        "status": row["status"],
+        "phone": row["phone"],
+        "items": [
+            {
+                "name": it.get("name", ""),
+                "qty": it.get("qty", 1),
+                "price": it.get("price", 0),
+                "modifiers": it.get("modifiers", {}),
+            }
+            for it in items
+        ],
+        "total": row["total_amount"] or sum(it.get("price", 0) * it.get("qty", 1) for it in items),
+        "source": "voice",
+        "notes": row["transcript"],
+    }
+    conn.close()
+    return kot
+
+
+# ─── CART RECOMMENDATIONS ───────────────────────────────────────────────
+
+@app.post("/api/cart/recommendations")
+def cart_recommendations(body: dict):
+    """Given cart item names, return complementary items the customer might enjoy."""
+    cart_names = [n.lower() for n in body.get("items", [])]
+    if not cart_names:
+        return {"recommendations": []}
+
+    conn = get_db()
+    c = conn.cursor()
+
+    # Resolve cart item IDs
+    menu_rows = c.execute("SELECT id, name, category, selling_price FROM menu_items WHERE is_active=1").fetchall()
+    name_to_row = {r["name"].lower(): dict(r) for r in menu_rows}
+    cart_ids = set()
+    cart_categories = set()
+    for n in cart_names:
+        row = name_to_row.get(n)
+        if row:
+            cart_ids.add(row["id"])
+            cart_categories.add(row["category"])
+
+    # Co-occurrence based: items frequently ordered together with cart items
+    cutoff = (datetime.now() - timedelta(days=90)).isoformat()
+    orders_with_cart = c.execute(
+        f"SELECT DISTINCT oi.order_id FROM order_items oi "
+        f"JOIN orders o ON oi.order_id = o.id "
+        f"WHERE oi.menu_item_id IN ({','.join('?' * len(cart_ids))}) AND o.order_time >= ?",
+        (*cart_ids, cutoff)
+    ).fetchall() if cart_ids else []
+    order_ids = [r["order_id"] for r in orders_with_cart]
+
+    co_items: dict[int, int] = {}
+    if order_ids:
+        placeholders = ','.join('?' * len(order_ids))
+        co_rows = c.execute(
+            f"SELECT menu_item_id, SUM(quantity) as freq FROM order_items "
+            f"WHERE order_id IN ({placeholders}) AND menu_item_id NOT IN ({','.join('?' * len(cart_ids))}) "
+            f"GROUP BY menu_item_id ORDER BY freq DESC LIMIT 20",
+            (*order_ids, *cart_ids)
+        ).fetchall()
+        co_items = {r["menu_item_id"]: r["freq"] for r in co_rows}
+
+    # Build recommendations: prioritize co-occurrence, then cross-category popular items
+    recs = []
+    seen_ids = set(cart_ids)
+    id_to_row = {r["id"]: r for r in (dict(row) for row in menu_rows)}
+
+    # 1. Co-occurrence picks
+    for mid, freq in sorted(co_items.items(), key=lambda x: -x[1]):
+        if mid in seen_ids:
+            continue
+        row = id_to_row.get(mid)
+        if not row:
+            continue
+        recs.append({
+            "id": row["id"],
+            "name": row["name"],
+            "price": row["selling_price"],
+            "category": row["category"],
+            "reason": "Frequently ordered together",
+        })
+        seen_ids.add(mid)
+        if len(recs) >= 4:
+            break
+
+    # 2. Fill with cross-category popular items if not enough co-occurrence data
+    if len(recs) < 4:
+        # Category pairing heuristics
+        pairings: dict[str, list[str]] = {
+            "Curries": ["Breads", "Rice"],
+            "Biryani": ["Starters", "Beverages"],
+            "Chinese": ["Starters", "Beverages"],
+            "Starters": ["Beverages", "Curries"],
+            "Breads": ["Curries"],
+            "Rice": ["Curries"],
+            "Beverages": ["Starters", "Desserts"],
+            "Desserts": ["Beverages"],
+        }
+        target_cats: set[str] = set()
+        for cat in cart_categories:
+            target_cats.update(pairings.get(cat, []))
+        target_cats -= cart_categories  # don't recommend from same category
+
+        for row in sorted(menu_rows, key=lambda r: -r["selling_price"]):
+            r = dict(row)
+            if r["id"] in seen_ids or r["category"] not in target_cats:
+                continue
+            recs.append({
+                "id": r["id"],
+                "name": r["name"],
+                "price": r["selling_price"],
+                "category": r["category"],
+                "reason": f"Goes great with {list(cart_categories)[0]}" if cart_categories else "Popular pick",
+            })
+            seen_ids.add(r["id"])
+            if len(recs) >= 4:
+                break
+
+    conn.close()
+    return {"recommendations": recs}
+
+
+# ─── SMART CALL TURN (OpenAI-powered intent understanding) ──────────────
+
+class CallTurnRequest(BaseModel):
+    transcript: str
+    conversation: list = []  # [{role, text}, ...]
+    current_order: list = []  # [{name, qty, price}, ...]
+
+@app.post("/api/voice/smart-turn")
+def smart_call_turn(req: CallTurnRequest):
+    """
+    Use OpenAI to understand the caller's intent given full conversation context.
+    Returns: intent (add_items | confirm | decline_more | modify | unclear),
+             items (if adding), and a natural reply.
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        # Fallback to demo endpoint behavior
+        return {"intent": "unclear", "items": [], "reply": "I couldn't process that.", "success": True}
+
+    # Build menu string for the prompt
+    conn = get_db()
+    c = conn.cursor()
+    menu_rows = c.execute("SELECT name, selling_price, category FROM menu_items WHERE is_active=1 ORDER BY category, name").fetchall()
+    conn.close()
+    menu_lines = [f"- {r['name']} (₹{r['selling_price']}, {r['category']})" for r in menu_rows]
+    menu_str = "\n".join(menu_lines)
+
+    # Build conversation history for context
+    conv_lines = []
+    for msg in req.conversation[-10:]:  # last 10 messages
+        role_label = "Customer" if msg.get("role") == "user" else "Restaurant"
+        conv_lines.append(f"{role_label}: {msg.get('text', '')}")
+
+    current_order_str = ""
+    if req.current_order:
+        order_parts = [f"{it.get('qty',1)}x {it.get('name','?')} (₹{it.get('price',0)})" for it in req.current_order]
+        current_order_str = "Current order so far: " + ", ".join(order_parts)
+    else:
+        current_order_str = "Current order: empty (no items yet)"
+
+    system_prompt = f"""You are an AI assistant for SmartBite restaurant, processing a phone call order.
+You must analyze the customer's latest message and determine their intent.
+
+RESTAURANT MENU:
+{menu_str}
+
+{current_order_str}
+
+CONVERSATION SO FAR:
+{chr(10).join(conv_lines)}
+
+RULES:
+1. Intent must be ONE of: "add_items", "confirm_order", "decline_more", "modify_order", "greeting", "unclear"
+2. "add_items" = customer wants to order new food items. Extract exact items with quantities.
+3. "confirm_order" = customer says yes/confirm/place order/done (ONLY when they are agreeing to place the order)
+4. "decline_more" = customer says no/nothing else/that's all (meaning they don't want more items, ready to finalize)
+5. "modify_order" = customer wants to change/remove/update existing items
+6. "greeting" = customer greets or asks a general question
+7. "unclear" = genuinely cannot understand what customer wants
+8. CRITICAL: Short words like "no", "nope", "nothing", "that's it", "that's all", "no thanks", "no more" are ALWAYS "decline_more" — they are NEVER food items.
+9. "no place order", "no just place the order", "place my order" = "decline_more" (customer wants to finalize)
+10. Only match items that clearly refer to food from the menu. Never hallucinate items.
+11. For quantities: if not specified, default to 1.
+12. Match items by name flexibly (e.g., "chai" = "Masala Chai", "coke" = "Coca Cola", "naan" = "Plain Naan")
+
+Respond with ONLY valid JSON (no markdown, no backticks):
+{{
+  "intent": "add_items|confirm_order|decline_more|modify_order|greeting|unclear",
+  "items": [{{"name": "exact menu item name", "qty": 1, "price": 0}}],
+  "reply": "natural restaurant assistant response"
+}}
+
+For "items": only include when intent is "add_items". Use exact menu item names and prices from the menu above.
+For "reply": write a warm, natural response as a restaurant phone assistant would say."""
+
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Customer's latest message: \"{req.transcript}\""}
+            ],
+            temperature=0.2,
+            max_tokens=500,
+        )
+        raw = response.choices[0].message.content.strip()
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+
+        parsed = json.loads(raw)
+
+        intent = parsed.get("intent", "unclear")
+        items = parsed.get("items", [])
+        reply = parsed.get("reply", "")
+
+        # Validate & enrich items with correct prices from DB
+        if intent == "add_items" and items:
+            conn2 = get_db()
+            menu_lookup = {}
+            for r in conn2.execute("SELECT name, selling_price FROM menu_items WHERE is_active=1").fetchall():
+                menu_lookup[r["name"].lower()] = {"name": r["name"], "price": float(r["selling_price"])}
+            conn2.close()
+
+            validated = []
+            for it in items:
+                key = (it.get("name") or "").lower()
+                if key in menu_lookup:
+                    validated.append({
+                        "name": menu_lookup[key]["name"],
+                        "qty": it.get("qty", 1),
+                        "price": menu_lookup[key]["price"],
+                    })
+            items = validated
+
+        return {
+            "success": True,
+            "intent": intent,
+            "items": items,
+            "reply": reply,
+        }
+
+    except Exception as e:
+        print(f"[SMART-TURN] OpenAI error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": True,
+            "intent": "unclear",
+            "items": [],
+            "reply": "I'm sorry, could you repeat that?",
+        }
+
 
 @app.post("/api/voice/live")
 def live_voice_endpoint(audio: UploadFile = File(...)):
@@ -787,7 +1254,7 @@ def live_voice_endpoint(audio: UploadFile = File(...)):
                     transcript_response = client.audio.transcriptions.create(
                         model="whisper-1", 
                         file=audio_file,
-                        language="en"
+                        language="hi"
                     )
                     transcript = transcript_response.text
                     
@@ -999,7 +1466,7 @@ def conversation_voice_endpoint(
                     transcript_response = client.audio.transcriptions.create(
                         model="whisper-1", 
                         file=f,
-                        language="en"
+                        language="hi"
                     )
                     transcript = transcript_response.text
                 print(f"[CONVERSATION] Transcription successful: {transcript}")
@@ -1219,7 +1686,7 @@ def voice_chat_endpoint(
                         transcript_response = client.audio.transcriptions.create(
                             model="whisper-1",
                             file=audio_file,
-                            language="en",
+                            language="hi",
                         )
                         user_message = (transcript_response.text or "").strip()
                 except Exception as whisper_error:

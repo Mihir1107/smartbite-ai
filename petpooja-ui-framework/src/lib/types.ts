@@ -55,6 +55,7 @@ export interface AIRecommendation {
 
 export interface AIRecommendationsResponse {
   recommendations: AIRecommendation[];
+  items?: AIRecommendation[];
   total_projected_monthly_gain: number;
 }
 

@@ -100,6 +100,32 @@ ORDER_PATTERNS = [
     {"items": ["Veg Manchurian", "Chowmein", "Cold Coffee"], "qty": [1, 1, 2]},
 ]
 
+
+def _deterministic_ratio(seed_text: str, min_value: float, max_value: float) -> float:
+    spread = max_value - min_value
+    if spread <= 0:
+        return min_value
+    seed_score = sum(ord(ch) for ch in seed_text) % 1000
+    return min_value + (seed_score / 999.0) * spread
+
+
+def estimate_food_cost(name: str, category: str, selling_price: float) -> float:
+    """Estimate per-item food cost with stable variation by category and item."""
+    category_ranges = {
+        "starters": (50.0, 64.0),
+        "curries": (54.0, 70.0),
+        "breads": (58.0, 75.0),
+        "biryani": (46.0, 60.0),
+        "rice": (46.0, 60.0),
+        "beverages": (60.0, 82.0),
+        "chinese": (48.0, 65.0),
+        "desserts": (55.0, 72.0),
+    }
+    min_margin, max_margin = category_ranges.get(category.lower(), (50.0, 68.0))
+    margin_pct = _deterministic_ratio(f"{name}::{category}", min_margin, max_margin)
+    margin_pct = max(35.0, min(85.0, margin_pct))
+    return round(selling_price * (1 - margin_pct / 100.0), 2)
+
 def create_database(db_path="smartbite.db"):
     """Initialize database with synthetic data"""
     conn = sqlite3.connect(db_path)
@@ -144,8 +170,8 @@ def create_database(db_path="smartbite.db"):
     # Insert menu items
     print("Inserting menu items...")
     for item in MENU_ITEMS:
-        cost_price = item["price"] * 0.4  # 40% cost
-        food_cost = item["price"] * 0.4
+        food_cost = estimate_food_cost(item["name"], item["category"], item["price"])
+        cost_price = food_cost
 
         insert_cols = ["name", "category", "selling_price"]
         insert_vals = [item["name"], item["category"], item["price"]]

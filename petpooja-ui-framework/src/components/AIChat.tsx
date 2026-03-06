@@ -195,7 +195,7 @@ export default function AIChat({ onClose, onOrderUpdate }: AIChatProps) {
   return (
     <div className="flex flex-col h-[600px] bg-white rounded-3xl border-2 border-[#1A1A1A] shadow-[3px_3px_0_#1A1A1A] overflow-hidden">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#FF4500] to-[#FD5602] px-6 py-4 flex items-center justify-between border-b-2 border-[#1A1A1A]">
+      <div className="bg-gradient-to-r from-[#DA291C] to-[#DA291C] px-6 py-4 flex items-center justify-between border-b-2 border-[#1A1A1A]">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-white border-2 border-[#1A1A1A] flex items-center justify-center">
             <span className="text-2xl">🤖</span>
@@ -227,17 +227,17 @@ export default function AIChat({ onClose, onOrderUpdate }: AIChatProps) {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-yellow-50 border-b-2 border-yellow-200 px-6 py-3"
+          className="bg-[#FFC72C]/20 border-b-2 border-[#FFC72C] px-6 py-3"
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5 text-yellow-600" />
-              <span className="font-bold text-sm text-yellow-900">
+              <ShoppingCart className="w-5 h-5 text-[#1A1A1A]" />
+              <span className="font-bold text-sm text-[#1A1A1A]">
                 {currentOrder.length} item(s) • ₹{orderTotal}
               </span>
             </div>
             {orderFinalized && (
-              <span className="text-xs font-black text-green-600 bg-green-100 px-3 py-1 rounded-full">
+              <span className="text-xs font-black text-white bg-[#DA291C] px-3 py-1 rounded-full">
                 ✓ Confirmed
               </span>
             )}
@@ -262,7 +262,7 @@ export default function AIChat({ onClose, onOrderUpdate }: AIChatProps) {
               <div
                 className={`max-w-[75%] rounded-2xl px-5 py-3 ${
                   msg.role === "user"
-                    ? "bg-[#FF4500] text-white border-2 border-[#1A1A1A] shadow-[2px_2px_0_#1A1A1A]"
+                    ? "bg-[#DA291C] text-white border-2 border-[#1A1A1A] shadow-[2px_2px_0_#1A1A1A]"
                     : "bg-white text-gray-800 border-2 border-gray-200"
                 }`}
               >
@@ -313,7 +313,7 @@ export default function AIChat({ onClose, onOrderUpdate }: AIChatProps) {
             className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
               isRecording
                 ? "bg-red-500 animate-pulse"
-                : "bg-[#FF4500] hover:bg-[#FD5602]"
+                : "bg-[#DA291C] hover:bg-[#9B1C1C]"
             } text-white border-2 border-[#1A1A1A] shadow-[2px_2px_0_#1A1A1A] disabled:opacity-50`}
           >
             {isRecording ? (
@@ -335,7 +335,7 @@ export default function AIChat({ onClose, onOrderUpdate }: AIChatProps) {
                 ? "Order complete! Start new conversation..."
                 : "Type your order or use voice..."
             }
-            className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-[#FF4500] focus:outline-none font-medium disabled:bg-gray-100"
+            className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-[#DA291C] focus:outline-none font-medium disabled:bg-gray-100"
           />
 
           {/* Send Button */}
@@ -343,7 +343,7 @@ export default function AIChat({ onClose, onOrderUpdate }: AIChatProps) {
             whileTap={{ scale: 0.9 }}
             onClick={() => sendMessage()}
             disabled={!inputText.trim() || isProcessing || orderFinalized}
-            className="w-12 h-12 rounded-full bg-gradient-to-br from-[#FF4500] to-[#FD5602] text-white flex items-center justify-center border-2 border-[#1A1A1A] shadow-[2px_2px_0_#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-12 h-12 rounded-full bg-gradient-to-br from-[#DA291C] to-[#DA291C] text-white flex items-center justify-center border-2 border-[#1A1A1A] shadow-[2px_2px_0_#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Send className="w-5 h-5" />
           </motion.button>

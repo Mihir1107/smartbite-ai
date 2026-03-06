@@ -44,21 +44,27 @@
 }
 
 :root {
+  --color-primary: #da291c;
+  --color-accent: #ffc72c;
+  --color-base: #1a1a1a;
+  --color-background: #ffffff;
+  --color-hover: #9b1c1c;
+
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
+  --background: #ffffff;
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: #da291c;
+  --primary-foreground: #ffffff;
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --accent: #ffc72c;
+  --accent-foreground: #1a1a1a;
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
@@ -82,7 +88,7 @@
   --pp-yellow: #ffc72c;
   --pp-black: #1a1a1a;
   --pp-white: #ffffff;
-  --pp-bg: #fff8f0;
+  --pp-bg: #ffffff;
   --pp-gray: #666;
   --pp-light-gray: #f5f5f5;
   --pp-border: #e0e0e0;
@@ -193,8 +199,14 @@ nextjs-portal {
 }
 
 .pp-btn-primary:hover {
+  background-color: var(--color-hover);
   box-shadow: 2px 2px 0px var(--pp-black);
   transform: translate(2px, 2px);
+}
+
+button[class*="bg-[#DA291C]"]:hover:not(:disabled),
+a[class*="bg-[#DA291C]"]:hover {
+  background-color: var(--color-hover) !important;
 }
 
 .pp-btn-primary:active {

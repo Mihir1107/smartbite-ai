@@ -25,8 +25,36 @@ import {
   SectionTitle,
   Footer,
 } from "@/components/shared";
+import { formatSmartTimestamp } from "@/lib/time";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+type ParsedOrderChip = {
+  name?: string;
+  item?: string;
+  qty?: number;
+};
+
+const DEBUG_PHONE_PATTERNS = ["session_", "diag_", "smoke_test"];
+
+function shouldHideVoiceOrder(phone: string): boolean {
+  return DEBUG_PHONE_PATTERNS.some((prefix) => phone.includes(prefix));
+}
+
+function formatVoicePhone(phone: string): string {
+  if (phone === "LIVE_DEMO") return "🎙 Live Demo";
+  return phone;
+}
+
+function parseStructuredOrder(structuredOrder: string): ParsedOrderChip[] {
+  try {
+    const parsed = JSON.parse(structuredOrder);
+    if (!Array.isArray(parsed)) return [];
+    return parsed;
+  } catch {
+    return [];
+  }
+}
 
 export default function VoiceCopilotPage() {
   const [isRecording, setIsRecording] = useState(false);
@@ -45,6 +73,9 @@ export default function VoiceCopilotPage() {
     "/api/voice/orders",
     { orders: [] },
     10000,
+  );
+  const filteredVoiceOrders = (voiceOrders?.orders || []).filter(
+    (order) => !shouldHideVoiceOrder(order.phone),
   );
 
   useEffect(() => {
@@ -248,7 +279,7 @@ export default function VoiceCopilotPage() {
                   ) : transcript ? (
                     <div className="w-full">
                       <div className="flex items-center gap-2 mb-3">
-                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <CheckCircle className="w-5 h-5 text-[#DA291C]" />
                         <h4 className="font-bold text-[#1A1A1A] dark:text-white">
                           Transcript
                         </h4>
@@ -351,8 +382,8 @@ export default function VoiceCopilotPage() {
                 </div>
 
                 <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                  {voiceOrders?.orders?.length ? (
-                    voiceOrders.orders.map((order) => (
+                  {filteredVoiceOrders.length ? (
+                    filteredVoiceOrders.map((order) => (
                       <div
                         key={order.id}
                         className="p-3 bg-[#f9f9f9] dark:bg-[#222] rounded-xl border border-[#eee] dark:border-[#333]"
@@ -362,18 +393,34 @@ export default function VoiceCopilotPage() {
                             #{order.id}
                           </span>
                           <span className="text-xs text-[#888]">
-                            {order.created_at}
+                            {formatSmartTimestamp(order.created_at)}
                           </span>
                         </div>
                         <p className="text-xs text-[#666] dark:text-[#aaa] mb-2 italic">
                           &ldquo;{order.transcript}&rdquo;
                         </p>
+                        {parseStructuredOrder(order.structured_order).length >
+                          0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {parseStructuredOrder(order.structured_order).map(
+                              (item, index) => (
+                                <span
+                                  key={`${order.id}-${index}`}
+                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-[#DA291C] border border-red-200"
+                                >
+                                  {item.qty ?? 1}x{" "}
+                                  {item.name || item.item || "Item"}
+                                </span>
+                              ),
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-[#888]">
                             Status: {order.status}
                           </span>
                           <span className="text-xs font-semibold text-[#DA291C]">
-                            {order.phone}
+                            {formatVoicePhone(order.phone)}
                           </span>
                         </div>
                       </div>
@@ -407,14 +454,14 @@ export default function VoiceCopilotPage() {
                     title: "Speech-to-Text",
                     desc: "Real-time transcription with restaurant-specific vocabulary & noisy environment adaptation",
                     color:
-                      "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300",
+                      "bg-[#FFC72C]/20 text-[#7a5900] border-[#FFC72C]/50 dark:text-[#FFC72C]",
                   },
                   {
                     icon: <Brain className="w-5 h-5" />,
                     title: "Intent Recognition",
                     desc: "NLU pipeline maps voice to PoS item database with modifier & customization handling",
                     color:
-                      "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300",
+                      "bg-[#FFC72C]/20 text-[#7a5900] border-[#FFC72C]/50 dark:text-[#FFC72C]",
                   },
                   {
                     icon: <MessageSquare className="w-5 h-5" />,
@@ -433,15 +480,14 @@ export default function VoiceCopilotPage() {
                     icon: <ChefHat className="w-5 h-5" />,
                     title: "KOT Auto-Creation",
                     desc: "Structured JSON pushed directly to PoS — zero manual entry, zero errors",
-                    color:
-                      "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300",
+                    color: "bg-[#DA291C]/10 text-[#DA291C] border-[#DA291C]/30",
                   },
                   {
                     icon: <Activity className="w-5 h-5" />,
                     title: "Order Analytics",
                     desc: "Every call analyzed for upsell hit rate, avg handle time, and conversion metrics",
                     color:
-                      "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300",
+                      "bg-red-100 text-[#DA291C] border-red-200 dark:bg-red-900/30 dark:text-red-300",
                   },
                 ].map((cap, i) => (
                   <motion.div

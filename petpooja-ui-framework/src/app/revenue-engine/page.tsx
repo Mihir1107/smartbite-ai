@@ -32,13 +32,19 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ─── AI Recommendations Panel ────────────────────────────────────────────────
 function AIRecommendationsPanel() {
-  const { data: recommendations } = usePollableFetch<AIRecommendationsResponse>(
-    "/api/menu/ai-recommendations",
-    { recommendations: [], total_projected_monthly_gain: 0 },
-    10000,
-  );
+  const { data: recommendations, refetch } =
+    usePollableFetch<AIRecommendationsResponse>(
+      "/api/menu/ai-recommendations",
+      { recommendations: [], total_projected_monthly_gain: 0 },
+      10000,
+    );
 
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
+  const [decisionFeedback, setDecisionFeedback] = useState<
+    Record<string, string>
+  >({});
+
+  const recs = recommendations?.recommendations || recommendations?.items || [];
 
   const handleDecision = async (
     rec: AIRecommendation,
@@ -51,18 +57,34 @@ function AIRecommendationsPanel() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ decision }),
+          body: JSON.stringify(
+            decision === "approve"
+              ? { action: "approve", suggested_price: rec.suggested_price }
+              : { action: "reject" },
+          ),
         },
       );
       if (!response.ok) throw new Error("Failed to submit decision");
+      setDecisionFeedback((prev) => ({
+        ...prev,
+        [String(rec.item_id)]:
+          decision === "approve"
+            ? "Approved and applied successfully."
+            : "Recommendation rejected.",
+      }));
+      await refetch();
     } catch (error) {
       console.error("Decision error:", error);
+      setDecisionFeedback((prev) => ({
+        ...prev,
+        [String(rec.item_id)]: "Unable to submit decision. Try again.",
+      }));
     } finally {
       setProcessing((prev) => ({ ...prev, [rec.item_id]: false }));
     }
   };
 
-  if (!recommendations?.recommendations?.length) {
+  if (!recs.length) {
     return (
       <div className="pp-card border-2 border-[#1A1A1A] text-center py-8">
         <Sparkles className="w-12 h-12 text-[#FFC72C] mx-auto mb-3" />
@@ -75,7 +97,7 @@ function AIRecommendationsPanel() {
 
   return (
     <div className="space-y-4">
-      {recommendations.recommendations.map((rec) => (
+      {recs.map((rec) => (
         <motion.div
           key={rec.item_id}
           initial={{ opacity: 0, x: -20 }}
@@ -87,10 +109,10 @@ function AIRecommendationsPanel() {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 {rec.action === "raise_price" && (
-                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  <TrendingUp className="w-5 h-5 text-[#DA291C]" />
                 )}
                 {rec.action === "create_combo" && (
-                  <Sparkles className="w-5 h-5 text-purple-600" />
+                  <Sparkles className="w-5 h-5 text-[#FFC72C]" />
                 )}
                 {rec.action === "promote" && (
                   <Flame className="w-5 h-5 text-[#DA291C]" />
@@ -98,6 +120,19 @@ function AIRecommendationsPanel() {
                 <h4 className="font-black text-[#1A1A1A] dark:text-white">
                   {rec.item_name}
                 </h4>
+                <span
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${
+                    rec.quadrant === "Star"
+                      ? "bg-green-100 text-green-700"
+                      : rec.quadrant === "Plowhorse"
+                        ? "bg-orange-100 text-orange-700"
+                        : rec.quadrant === "Puzzle"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {rec.quadrant}
+                </span>
               </div>
               <p className="text-sm text-[#666] dark:text-[#aaa] mb-3">
                 {rec.reasoning}
@@ -110,18 +145,32 @@ function AIRecommendationsPanel() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 text-green-600" />
-                  <span className="font-semibold text-green-600">
-                    Est. Gain: ₹{rec.projected_gain.toLocaleString()}
+                  <DollarSign className="w-3.5 h-3.5 text-[#DA291C]" />
+                  <span className="font-semibold text-[#DA291C]">
+                    Projected Monthly Gain: ₹
+                    {rec.projected_gain.toLocaleString()}
                   </span>
                 </div>
+                {rec.action === "raise_price" && rec.suggested_price && (
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-[#DA291C]" />
+                    <span className="font-semibold text-[#DA291C]">
+                      Suggested Price: ₹{rec.suggested_price}
+                    </span>
+                  </div>
+                )}
               </div>
+              {decisionFeedback[String(rec.item_id)] && (
+                <p className="text-xs mt-3 text-[#DA291C] font-semibold">
+                  {decisionFeedback[String(rec.item_id)]}
+                </p>
+              )}
             </div>
             <div className="flex gap-2 flex-shrink-0">
               <button
                 onClick={() => handleDecision(rec, "approve")}
                 disabled={processing[rec.item_id]}
-                className="pp-btn-icon bg-green-100 border-green-600 text-green-600 hover:bg-green-200 disabled:opacity-50"
+                className="pp-btn-icon bg-[#DA291C] border-[#1A1A1A] text-white hover:bg-[#9B1C1C] disabled:opacity-50"
                 title="Approve"
               >
                 <ThumbsUp className="w-4 h-4" />
@@ -272,7 +321,7 @@ export default function RevenueEnginePage() {
                           Margin
                         </th>
                         <th className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm">
-                          Trend
+                          Quadrant
                         </th>
                         <th className="text-right p-3 font-black text-[#1A1A1A] dark:text-white text-sm">
                           Actions
@@ -295,22 +344,36 @@ export default function RevenueEnginePage() {
                             <td className="p-3 text-[#666] dark:text-[#aaa]">
                               {item.units_sold}
                             </td>
-                            <td className="p-3 font-semibold text-green-600">
+                            <td className="p-3 font-semibold text-[#1A1A1A]">
                               ₹{item.revenue.toLocaleString()}
                             </td>
                             <td className="p-3">
                               <span
                                 className={`px-2 py-1 rounded-lg text-xs font-bold ${
-                                  item.cm_percentage > 50
+                                  item.cm_percentage >= 70
                                     ? "bg-green-100 text-green-700"
-                                    : "bg-orange-100 text-orange-700"
+                                    : item.cm_percentage >= 50
+                                      ? "bg-orange-100 text-orange-700"
+                                      : "bg-red-100 text-red-700"
                                 }`}
                               >
                                 {item.cm_percentage.toFixed(0)}%
                               </span>
                             </td>
                             <td className="p-3">
-                              <span className="text-[#888]">—</span>
+                              <span
+                                className={`px-2 py-1 rounded-lg text-xs font-bold ${
+                                  item.quadrant === "Star"
+                                    ? "bg-green-100 text-green-700"
+                                    : item.quadrant === "Plowhorse"
+                                      ? "bg-orange-100 text-orange-700"
+                                      : item.quadrant === "Puzzle"
+                                        ? "bg-blue-100 text-blue-700"
+                                        : "bg-red-100 text-red-700"
+                                }`}
+                              >
+                                {item.quadrant}
+                              </span>
                             </td>
                             <td className="p-3 text-right">
                               <button
@@ -321,7 +384,8 @@ export default function RevenueEnginePage() {
                                     action: "raise_price",
                                   })
                                 }
-                                className="pp-btn-icon mr-2"
+                                className="pp-btn-icon mr-2 bg-[#DA291C] border-[#1A1A1A] text-white hover:bg-[#9B1C1C]"
+                                title="Optimize Price"
                               >
                                 <TrendingUp className="w-3.5 h-3.5" />
                               </button>
@@ -334,6 +398,7 @@ export default function RevenueEnginePage() {
                                   })
                                 }
                                 className="pp-btn-icon bg-red-100 border-red-600 text-red-600"
+                                title="Archive Item"
                               >
                                 <XCircle className="w-3.5 h-3.5" />
                               </button>
@@ -388,7 +453,7 @@ export default function RevenueEnginePage() {
                           </span>{" "}
                           {combo.frequency} times
                         </div>
-                        <div className="text-xs text-green-600 font-bold">
+                        <div className="text-xs text-[#DA291C] font-bold">
                           Save ₹{combo.saving}
                         </div>
                       </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import {
   ChefHat,
@@ -16,8 +17,11 @@ import {
 
 // ─── Navigation Bar ──────────────────────────────────────────────────────────
 export function NavigationBar() {
+  const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const isActiveLink = (href: string) => pathname === href.split("#")[0];
 
   useEffect(() => {
     const handleScroll = () => {
@@ -29,8 +33,6 @@ export function NavigationBar() {
 
   const navLinks = [
     { href: "/revenue-engine", label: "Revenue Engine" },
-    { href: "/voice-copilot", label: "Voice AI" },
-    { href: "/ghost-recovery", label: "Missed Calls" },
     { href: "/components", label: "Components" },
   ];
 
@@ -65,7 +67,11 @@ export function NavigationBar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="px-4 py-2 text-sm font-bold text-[#1A1A1A] dark:text-white hover:bg-[#FFC72C] hover:text-[#1A1A1A] rounded-xl transition-all"
+                className={`px-4 py-2 text-sm font-bold rounded-xl transition-all ${
+                  isActiveLink(link.href)
+                    ? "text-[#DA291C] underline decoration-2 decoration-[#DA291C] underline-offset-4"
+                    : "text-[#1A1A1A] dark:text-white hover:bg-[#FFC72C]/25 hover:text-[#DA291C]"
+                }`}
               >
                 {link.label}
               </Link>
@@ -108,7 +114,11 @@ export function NavigationBar() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="block px-4 py-2 text-sm font-bold text-[#1A1A1A] dark:text-white hover:bg-[#FFC72C] hover:text-[#1A1A1A] rounded-xl transition-all"
+                  className={`block px-4 py-2 text-sm font-bold rounded-xl transition-all ${
+                    isActiveLink(link.href)
+                      ? "text-[#DA291C] bg-[#FFC72C]/20"
+                      : "text-[#1A1A1A] dark:text-white hover:bg-[#FFC72C]/25 hover:text-[#DA291C]"
+                  }`}
                 >
                   {link.label}
                 </Link>
@@ -142,9 +152,12 @@ export function AppNavigationBar({
   onLogout?: () => void;
   onSwitchToCustomer?: () => void;
 }) {
+  const pathname = usePathname();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement | null>(null);
+
+  const isActiveLink = (href: string) => pathname === href.split("#")[0];
 
   useEffect(() => {
     const handleScroll = () => {
@@ -171,8 +184,6 @@ export function AppNavigationBar({
       ? [
           { href: "/owner", label: "Dashboard" },
           { href: "/owner/revenue-engine", label: "Revenue Engine" },
-          { href: "/owner/voice-copilot", label: "Voice Copilot" },
-          { href: "/owner/ghost-recovery", label: "Ghost Recovery" },
           {
             href: "/owner/revenue-engine#ai-recommendations",
             label: "AI Optimizer",
@@ -186,8 +197,6 @@ export function AppNavigationBar({
           ]
         : [
             { href: "/revenue-engine", label: "Revenue Engine" },
-            { href: "/voice-copilot", label: "Voice AI" },
-            { href: "/ghost-recovery", label: "Missed Calls" },
             { href: "/components", label: "Components" },
           ];
 
@@ -254,7 +263,13 @@ export function AppNavigationBar({
               <Link
                 key={link.href}
                 href={link.href}
-                className="px-3 py-2 text-sm font-bold text-[#1A1A1A] dark:text-white hover:bg-[#FFC72C] hover:text-[#1A1A1A] rounded-xl transition-all"
+                className={`px-3 py-2 text-sm font-bold rounded-xl transition-all ${
+                  isActiveLink(link.href)
+                    ? "text-[#DA291C] underline decoration-2 decoration-[#DA291C] underline-offset-4"
+                    : link.label === "AI Optimizer"
+                      ? "text-[#1A1A1A] bg-[#FFC72C]/35 border border-[#FFC72C] hover:bg-[#FFC72C]/50 hover:text-[#1A1A1A]"
+                      : "text-[#1A1A1A] dark:text-white hover:bg-[#FFC72C]/25 hover:text-[#DA291C]"
+                }`}
               >
                 {link.label}
               </Link>
@@ -263,7 +278,7 @@ export function AppNavigationBar({
               <div ref={profileRef} className="ml-3 relative">
                 <button
                   onClick={() => setIsProfileOpen((prev) => !prev)}
-                  className="w-10 h-10 rounded-full bg-[#FF4500] border-2 border-[#1A1A1A] text-white font-black shadow-[2px_2px_0_#1A1A1A] flex items-center justify-center"
+                  className="w-10 h-10 rounded-full bg-[#DA291C] border-2 border-[#1A1A1A] text-white font-black shadow-[2px_2px_0_#1A1A1A] flex items-center justify-center"
                   aria-label="Open profile menu"
                 >
                   {userInitial}
@@ -288,7 +303,7 @@ export function AppNavigationBar({
                               setIsProfileOpen(false);
                               handleSwitchClick();
                             }}
-                            className="w-full text-left px-3 py-2 rounded-xl text-sm font-bold text-[#1A1A1A] hover:bg-orange-50"
+                            className="w-full text-left px-3 py-2 rounded-xl text-sm font-bold text-[#1A1A1A] hover:bg-red-50"
                           >
                             Switch to Customer
                           </button>
@@ -321,9 +336,11 @@ export function AppNavigationBar({
 export function Section({
   children,
   className,
+  id,
 }: {
   children: React.ReactNode;
   className?: string;
+  id?: string;
 }) {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: "-100px" });
@@ -335,6 +352,7 @@ export function Section({
       animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 50 }}
       transition={{ duration: 0.6 }}
       className={className}
+      id={id}
     >
       {children}
     </motion.div>
@@ -413,21 +431,21 @@ export function ToastContainer({
             exit={{ opacity: 0, x: 50 }}
             className={`pp-card px-4 py-3 shadow-lg border-2 ${
               toast.type === "success"
-                ? "border-green-600 bg-green-50"
+                ? "border-[#DA291C] bg-red-50"
                 : toast.type === "error"
                   ? "border-red-600 bg-red-50"
-                  : "border-blue-600 bg-blue-50"
+                  : "border-[#FFC72C] bg-[#FFC72C]/20"
             }`}
           >
             <div className="flex items-center gap-2">
               {toast.type === "success" && (
-                <CheckCircle className="w-4 h-4 text-green-600" />
+                <CheckCircle className="w-4 h-4 text-[#DA291C]" />
               )}
               {toast.type === "error" && (
                 <XCircle className="w-4 h-4 text-red-600" />
               )}
               {toast.type === "info" && (
-                <AlertTriangle className="w-4 h-4 text-blue-600" />
+                <AlertTriangle className="w-4 h-4 text-[#7a5900]" />
               )}
               <span className="text-sm font-semibold text-[#1A1A1A]">
                 {toast.message}

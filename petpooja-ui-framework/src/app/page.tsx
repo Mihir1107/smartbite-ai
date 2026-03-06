@@ -41,7 +41,7 @@ export default function LandingPage() {
   }, [router, mounted]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#FF4500] via-[#FD5602] to-[#FF6B35] relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-[#DA291C] via-[#DA291C] to-[#DA291C] relative overflow-hidden">
       {/* Animated Background - Only render on client to avoid hydration mismatch */}
       {mounted && (
         <div className="absolute inset-0 opacity-30">
@@ -92,7 +92,7 @@ export default function LandingPage() {
               transition={{ type: "spring", stiffness: 200, delay: 0.2 }}
               className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-white shadow-2xl mb-8"
             >
-              <UtensilsCrossed className="w-16 h-16 text-[#FF4500]" />
+              <UtensilsCrossed className="w-16 h-16 text-[#DA291C]" />
             </motion.div>
 
             {/* Title */}
@@ -125,7 +125,7 @@ export default function LandingPage() {
               <motion.button
                 whileHover={{ scale: 1.06, y: -2 }}
                 whileTap={{ scale: 0.95 }}
-                className="px-10 py-5 bg-white text-[#FF4500] font-black rounded-2xl shadow-[0_0_0_2px_rgba(255,255,255,0.22),0_16px_36px_rgba(255,255,255,0.35)] transition-all text-xl flex items-center gap-3"
+                className="px-10 py-5 bg-white text-[#DA291C] font-black rounded-2xl shadow-[0_0_0_2px_rgba(255,255,255,0.22),0_16px_36px_rgba(255,255,255,0.35)] transition-all text-xl flex items-center gap-3"
                 style={{ fontFamily: "Fredoka One" }}
               >
                 Login To SmartBite
@@ -160,39 +160,39 @@ export default function LandingPage() {
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 flex gap-3">
-                <Mic className="w-5 h-5 text-[#FF4500] mt-1" />
+              <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex gap-3">
+                <Mic className="w-5 h-5 text-[#DA291C] mt-1" />
                 <p className="text-[#1A1A1A] font-semibold">
                   Voice ordering with transcript to structured order conversion.
                 </p>
               </div>
-              <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 flex gap-3">
-                <MessageSquare className="w-5 h-5 text-[#FF4500] mt-1" />
+              <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex gap-3">
+                <MessageSquare className="w-5 h-5 text-[#DA291C] mt-1" />
                 <p className="text-[#1A1A1A] font-semibold">
                   AI chat assistant for guided food ordering and upsells.
                 </p>
               </div>
-              <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 flex gap-3">
-                <PhoneCall className="w-5 h-5 text-[#FF4500] mt-1" />
+              <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex gap-3">
+                <PhoneCall className="w-5 h-5 text-[#DA291C] mt-1" />
                 <p className="text-[#1A1A1A] font-semibold">
                   Call-style web interaction for natural conversational
                   ordering.
                 </p>
               </div>
-              <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 flex gap-3">
-                <ShoppingCart className="w-5 h-5 text-[#FF4500] mt-1" />
+              <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex gap-3">
+                <ShoppingCart className="w-5 h-5 text-[#DA291C] mt-1" />
                 <p className="text-[#1A1A1A] font-semibold">
                   Direct menu browsing with quick add-to-cart checkout flow.
                 </p>
               </div>
-              <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 flex gap-3">
-                <TrendingUp className="w-5 h-5 text-[#FF4500] mt-1" />
+              <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex gap-3">
+                <TrendingUp className="w-5 h-5 text-[#DA291C] mt-1" />
                 <p className="text-[#1A1A1A] font-semibold">
                   Revenue insights and recommendation engine for better margins.
                 </p>
               </div>
-              <div className="p-4 rounded-2xl bg-orange-50 border border-orange-200 flex gap-3">
-                <Clock3 className="w-5 h-5 text-[#FF4500] mt-1" />
+              <div className="p-4 rounded-2xl bg-red-50 border border-red-200 flex gap-3">
+                <Clock3 className="w-5 h-5 text-[#DA291C] mt-1" />
                 <p className="text-[#1A1A1A] font-semibold">
                   Fast order confirmation pipeline designed for peak-hour speed.
                 </p>

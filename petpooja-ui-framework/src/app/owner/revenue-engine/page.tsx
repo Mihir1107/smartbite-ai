@@ -14,6 +14,9 @@ import {
   Flame,
   XCircle,
   Lightbulb,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { usePollableFetch } from "@/lib/api";
 import type {
@@ -32,13 +35,19 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 // ─── AI Recommendations Panel ────────────────────────────────────────────────
 function AIRecommendationsPanel() {
-  const { data: recommendations } = usePollableFetch<AIRecommendationsResponse>(
-    "/api/menu/ai-recommendations",
-    { recommendations: [], total_projected_monthly_gain: 0 },
-    10000,
-  );
+  const { data: recommendations, refetch } =
+    usePollableFetch<AIRecommendationsResponse>(
+      "/api/menu/ai-recommendations",
+      { recommendations: [], total_projected_monthly_gain: 0 },
+      10000,
+    );
 
   const [processing, setProcessing] = useState<Record<string, boolean>>({});
+  const [decisionFeedback, setDecisionFeedback] = useState<
+    Record<string, string>
+  >({});
+
+  const recs = recommendations?.recommendations || recommendations?.items || [];
 
   const handleDecision = async (
     rec: AIRecommendation,
@@ -51,18 +60,34 @@ function AIRecommendationsPanel() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ decision }),
+          body: JSON.stringify(
+            decision === "approve"
+              ? { action: "approve", suggested_price: rec.suggested_price }
+              : { action: "reject" },
+          ),
         },
       );
       if (!response.ok) throw new Error("Failed to submit decision");
+      setDecisionFeedback((prev) => ({
+        ...prev,
+        [String(rec.item_id)]:
+          decision === "approve"
+            ? "Approved and applied successfully."
+            : "Recommendation rejected.",
+      }));
+      await refetch();
     } catch (error) {
       console.error("Decision error:", error);
+      setDecisionFeedback((prev) => ({
+        ...prev,
+        [String(rec.item_id)]: "Unable to submit decision. Try again.",
+      }));
     } finally {
       setProcessing((prev) => ({ ...prev, [rec.item_id]: false }));
     }
   };
 
-  if (!recommendations?.recommendations?.length) {
+  if (!recs.length) {
     return (
       <div className="pp-card border-2 border-[#1A1A1A] text-center py-8">
         <Sparkles className="w-12 h-12 text-[#FFC72C] mx-auto mb-3" />
@@ -75,7 +100,7 @@ function AIRecommendationsPanel() {
 
   return (
     <div className="space-y-4">
-      {recommendations.recommendations.map((rec) => (
+      {recs.map((rec) => (
         <motion.div
           key={rec.item_id}
           initial={{ opacity: 0, x: -20 }}
@@ -87,10 +112,10 @@ function AIRecommendationsPanel() {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-2">
                 {rec.action === "raise_price" && (
-                  <TrendingUp className="w-5 h-5 text-green-600" />
+                  <TrendingUp className="w-5 h-5 text-[#DA291C]" />
                 )}
                 {rec.action === "create_combo" && (
-                  <Sparkles className="w-5 h-5 text-purple-600" />
+                  <Sparkles className="w-5 h-5 text-[#FFC72C]" />
                 )}
                 {rec.action === "promote" && (
                   <Flame className="w-5 h-5 text-[#DA291C]" />
@@ -98,6 +123,19 @@ function AIRecommendationsPanel() {
                 <h4 className="font-black text-[#1A1A1A] dark:text-white">
                   {rec.item_name}
                 </h4>
+                <span
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${
+                    rec.quadrant === "Star"
+                      ? "bg-green-100 text-green-700"
+                      : rec.quadrant === "Plowhorse"
+                        ? "bg-orange-100 text-orange-700"
+                        : rec.quadrant === "Puzzle"
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {rec.quadrant}
+                </span>
               </div>
               <p className="text-sm text-[#666] dark:text-[#aaa] mb-3">
                 {rec.reasoning}
@@ -110,18 +148,32 @@ function AIRecommendationsPanel() {
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <DollarSign className="w-3.5 h-3.5 text-green-600" />
-                  <span className="font-semibold text-green-600">
-                    Est. Gain: ₹{rec.projected_gain.toLocaleString()}
+                  <DollarSign className="w-3.5 h-3.5 text-[#DA291C]" />
+                  <span className="font-semibold text-[#DA291C]">
+                    Projected Monthly Gain: ₹
+                    {rec.projected_gain.toLocaleString()}
                   </span>
                 </div>
+                {rec.action === "raise_price" && rec.suggested_price && (
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-[#DA291C]" />
+                    <span className="font-semibold text-[#DA291C]">
+                      Suggested Price: ₹{rec.suggested_price}
+                    </span>
+                  </div>
+                )}
               </div>
+              {decisionFeedback[String(rec.item_id)] && (
+                <p className="text-xs mt-3 text-[#DA291C] font-semibold">
+                  {decisionFeedback[String(rec.item_id)]}
+                </p>
+              )}
             </div>
             <div className="flex gap-2 flex-shrink-0">
               <button
                 onClick={() => handleDecision(rec, "approve")}
                 disabled={processing[rec.item_id]}
-                className="pp-btn-icon bg-green-100 border-green-600 text-green-600 hover:bg-green-200 disabled:opacity-50"
+                className="pp-btn-icon bg-[#DA291C] border-[#1A1A1A] text-white hover:bg-[#9B1C1C] disabled:opacity-50"
                 title="Approve"
               >
                 <ThumbsUp className="w-4 h-4" />
@@ -150,14 +202,19 @@ export default function RevenueEnginePage() {
   const [actionModal, setActionModal] = useState<{
     itemId: string;
     itemName: string;
+    currentPrice: number;
     action: "raise_price" | "archive";
   } | null>(null);
+  const [newPrice, setNewPrice] = useState<string>("");
+  const [sortCol, setSortCol] = useState<string>("revenue");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const { data: menuData } = usePollableFetch<MenuAnalyticsResponse>(
-    "/api/menu/analytics",
-    { items: [], median_units: 0, median_cm: 0 },
-    10000,
-  );
+  const { data: menuData, refetch: refetchMenu } =
+    usePollableFetch<MenuAnalyticsResponse>(
+      "/api/menu/analytics",
+      { items: [], median_units: 0, median_cm: 0 },
+      10000,
+    );
 
   const { data: combosData } = usePollableFetch<{
     combos: {
@@ -174,16 +231,48 @@ export default function RevenueEnginePage() {
     action: "raise_price" | "archive",
   ) => {
     try {
+      const body: Record<string, unknown> = { action };
+      if (action === "raise_price" && newPrice) {
+        body.new_price = Number(newPrice);
+      }
       const response = await fetch(`${API_BASE}/api/menu/${itemId}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error("Action failed");
       setActionModal(null);
+      setNewPrice("");
+      await refetchMenu();
     } catch (error) {
       console.error("Menu action error:", error);
     }
+  };
+
+  const toggleSort = (col: string) => {
+    if (sortCol === col) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortCol(col);
+      setSortDir("desc");
+    }
+  };
+
+  const sortedItems = [...(menuData?.items || [])].sort((a, b) => {
+    const key = sortCol as keyof typeof a;
+    const av = (a[key] as number) ?? 0;
+    const bv = (b[key] as number) ?? 0;
+    return sortDir === "asc" ? av - bv : bv - av;
+  });
+
+  const SortIcon = ({ col }: { col: string }) => {
+    if (sortCol !== col)
+      return <ArrowUpDown className="w-3 h-3 inline ml-1 opacity-40" />;
+    return sortDir === "asc" ? (
+      <ArrowUp className="w-3 h-3 inline ml-1 text-[#DA291C]" />
+    ) : (
+      <ArrowDown className="w-3 h-3 inline ml-1 text-[#DA291C]" />
+    );
   };
 
   return (
@@ -259,20 +348,32 @@ export default function RevenueEnginePage() {
                         <th className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm">
                           Item
                         </th>
-                        <th className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm">
-                          Price
+                        <th
+                          className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm cursor-pointer select-none"
+                          onClick={() => toggleSort("selling_price")}
+                        >
+                          Price <SortIcon col="selling_price" />
+                        </th>
+                        <th
+                          className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm cursor-pointer select-none"
+                          onClick={() => toggleSort("units_sold")}
+                        >
+                          Orders <SortIcon col="units_sold" />
+                        </th>
+                        <th
+                          className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm cursor-pointer select-none"
+                          onClick={() => toggleSort("revenue")}
+                        >
+                          Revenue <SortIcon col="revenue" />
+                        </th>
+                        <th
+                          className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm cursor-pointer select-none"
+                          onClick={() => toggleSort("cm_percentage")}
+                        >
+                          Margin <SortIcon col="cm_percentage" />
                         </th>
                         <th className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm">
-                          Orders
-                        </th>
-                        <th className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm">
-                          Revenue
-                        </th>
-                        <th className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm">
-                          Margin
-                        </th>
-                        <th className="text-left p-3 font-black text-[#1A1A1A] dark:text-white text-sm">
-                          Trend
+                          Quadrant
                         </th>
                         <th className="text-right p-3 font-black text-[#1A1A1A] dark:text-white text-sm">
                           Actions
@@ -280,8 +381,8 @@ export default function RevenueEnginePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {menuData?.items?.length ? (
-                        menuData.items.map((item) => (
+                      {sortedItems.length ? (
+                        sortedItems.map((item) => (
                           <tr
                             key={item.id}
                             className="border-b border-[#f0f0f0] dark:border-[#2a2a2a]"
@@ -295,22 +396,36 @@ export default function RevenueEnginePage() {
                             <td className="p-3 text-[#666] dark:text-[#aaa]">
                               {item.units_sold}
                             </td>
-                            <td className="p-3 font-semibold text-green-600">
+                            <td className="p-3 font-semibold text-[#1A1A1A] dark:text-white">
                               ₹{item.revenue.toLocaleString()}
                             </td>
                             <td className="p-3">
                               <span
                                 className={`px-2 py-1 rounded-lg text-xs font-bold ${
-                                  item.cm_percentage > 50
+                                  item.cm_percentage >= 70
                                     ? "bg-green-100 text-green-700"
-                                    : "bg-orange-100 text-orange-700"
+                                    : item.cm_percentage >= 50
+                                      ? "bg-orange-100 text-orange-700"
+                                      : "bg-red-100 text-red-700"
                                 }`}
                               >
                                 {item.cm_percentage.toFixed(0)}%
                               </span>
                             </td>
                             <td className="p-3">
-                              <span className="text-[#888]">—</span>
+                              <span
+                                className={`px-2 py-1 rounded-lg text-xs font-bold ${
+                                  item.quadrant === "Star"
+                                    ? "bg-green-100 text-green-700"
+                                    : item.quadrant === "Plowhorse"
+                                      ? "bg-orange-100 text-orange-700"
+                                      : item.quadrant === "Puzzle"
+                                        ? "bg-blue-100 text-blue-700"
+                                        : "bg-red-100 text-red-700"
+                                }`}
+                              >
+                                {item.quadrant}
+                              </span>
                             </td>
                             <td className="p-3 text-right">
                               <button
@@ -318,10 +433,12 @@ export default function RevenueEnginePage() {
                                   setActionModal({
                                     itemId: String(item.id),
                                     itemName: item.name,
+                                    currentPrice: item.selling_price,
                                     action: "raise_price",
                                   })
                                 }
-                                className="pp-btn-icon mr-2"
+                                className="pp-btn-icon mr-2 bg-[#DA291C] border-[#1A1A1A] text-white hover:bg-[#9B1C1C]"
+                                title="Optimize Price"
                               >
                                 <TrendingUp className="w-3.5 h-3.5" />
                               </button>
@@ -330,10 +447,12 @@ export default function RevenueEnginePage() {
                                   setActionModal({
                                     itemId: String(item.id),
                                     itemName: item.name,
+                                    currentPrice: item.selling_price,
                                     action: "archive",
                                   })
                                 }
                                 className="pp-btn-icon bg-red-100 border-red-600 text-red-600"
+                                title="Archive Item"
                               >
                                 <XCircle className="w-3.5 h-3.5" />
                               </button>
@@ -388,7 +507,7 @@ export default function RevenueEnginePage() {
                           </span>{" "}
                           {combo.frequency} times
                         </div>
-                        <div className="text-xs text-green-600 font-bold">
+                        <div className="text-xs text-[#DA291C] font-bold">
                           Save ₹{combo.saving}
                         </div>
                       </div>
@@ -416,7 +535,10 @@ export default function RevenueEnginePage() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-                onClick={() => setActionModal(null)}
+                onClick={() => {
+                  setActionModal(null);
+                  setNewPrice("");
+                }}
               >
                 <motion.div
                   initial={{ scale: 0.9 }}
@@ -427,24 +549,65 @@ export default function RevenueEnginePage() {
                   style={{ boxShadow: "8px 8px 0px #DA291C" }}
                 >
                   <h3 className="text-xl font-black text-[#1A1A1A] dark:text-white mb-4">
-                    Confirm Action
-                  </h3>
-                  <p className="text-[#666] dark:text-[#aaa] mb-6">
                     {actionModal.action === "raise_price"
-                      ? `Increase price for "${actionModal.itemName}"?`
-                      : `Archive "${actionModal.itemName}"?`}
-                  </p>
+                      ? "Optimize Price"
+                      : "Archive Item"}
+                  </h3>
+                  {actionModal.action === "raise_price" ? (
+                    <div className="mb-6">
+                      <p className="text-[#666] dark:text-[#aaa] mb-3">
+                        Current price for &ldquo;{actionModal.itemName}&rdquo;:{" "}
+                        <span className="font-bold text-[#1A1A1A] dark:text-white">
+                          ₹{actionModal.currentPrice}
+                        </span>
+                      </p>
+                      <label className="block text-sm font-bold text-[#1A1A1A] dark:text-white mb-1">
+                        New Price (₹)
+                      </label>
+                      <input
+                        type="number"
+                        value={
+                          newPrice ||
+                          String(Math.round(actionModal.currentPrice * 1.12))
+                        }
+                        onChange={(e) => setNewPrice(e.target.value)}
+                        className="w-full px-4 py-2 rounded-xl border-2 border-[#1A1A1A] bg-white dark:bg-[#2a2a2a] text-[#1A1A1A] dark:text-white font-bold text-lg"
+                      />
+                      <p className="text-xs text-[#888] mt-1">
+                        AI suggests ~12% increase: ₹
+                        {Math.round(actionModal.currentPrice * 1.12)}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[#666] dark:text-[#aaa] mb-6">
+                      Remove &ldquo;{actionModal.itemName}&rdquo; from the
+                      active menu?
+                    </p>
+                  )}
                   <div className="flex gap-3">
                     <button
-                      onClick={() =>
-                        handleMenuAction(actionModal.itemId, actionModal.action)
-                      }
+                      onClick={() => {
+                        if (actionModal.action === "raise_price" && !newPrice) {
+                          setNewPrice(
+                            String(Math.round(actionModal.currentPrice * 1.12)),
+                          );
+                        }
+                        handleMenuAction(
+                          actionModal.itemId,
+                          actionModal.action,
+                        );
+                      }}
                       className="flex-1 pp-btn-primary justify-center"
                     >
-                      Confirm
+                      {actionModal.action === "raise_price"
+                        ? "Update Price"
+                        : "Archive"}
                     </button>
                     <button
-                      onClick={() => setActionModal(null)}
+                      onClick={() => {
+                        setActionModal(null);
+                        setNewPrice("");
+                      }}
                       className="flex-1 pp-btn-ghost justify-center"
                     >
                       Cancel
