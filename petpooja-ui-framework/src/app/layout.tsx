@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PetPooja — UI Component Library",
+  title: "Smartbite",
   description:
     "A bold, fast-food-inspired UI component library and design system.",
 };

@@ -270,7 +270,7 @@ export default function OwnerDashboard() {
         "Jump straight to live AI recommendations for pricing, combos, and menu optimization",
       icon: <Sparkles className="w-12 h-12" />,
       color: "from-[#DA291C] to-[#9B1C1C]",
-      href: "/owner/revenue-engine#ai-recommendations",
+      href: "/owner/ai-optimizer",
       stats:
         typeof stats?.total_projected_monthly_gain === "number"
           ? `₹${Math.round(stats.total_projected_monthly_gain / 1000)}K`

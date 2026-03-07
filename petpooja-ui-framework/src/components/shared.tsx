@@ -185,7 +185,7 @@ export function AppNavigationBar({
           { href: "/owner", label: "Dashboard" },
           { href: "/owner/revenue-engine", label: "Revenue Engine" },
           {
-            href: "/owner/revenue-engine#ai-recommendations",
+            href: "/owner/ai-optimizer",
             label: "AI Optimizer",
           },
         ]
