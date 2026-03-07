@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChefHat } from "lucide-react";
 import VoiceCallAssistant from "@/components/VoiceCallAssistant";
+import { getAuthSession } from "@/lib/auth";
 
 export default function CallAssistantPage() {
   const router = useRouter();
@@ -18,9 +19,7 @@ export default function CallAssistantPage() {
   useEffect(() => {
     if (!mounted) return;
 
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-    const storedUsername = localStorage.getItem("username");
+    const { token, role, username: storedUsername } = getAuthSession();
 
     if (!token || role !== "user") {
       router.push("/login");

@@ -11,6 +11,7 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 import { API_BASE } from "@/lib/api";
+import { setAuthSession } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -44,10 +45,8 @@ export default function LoginPage() {
 
       const data = await response.json();
 
-      // Store token and user info
-      localStorage.setItem("token", data.access_token);
-      localStorage.setItem("username", data.username);
-      localStorage.setItem("role", data.role);
+      // Store auth per-tab so owner/user can run side-by-side.
+      setAuthSession(data.access_token, data.username, data.role);
 
       // Redirect based on role
       if (data.role === "owner") {

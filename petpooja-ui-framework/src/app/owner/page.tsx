@@ -23,6 +23,7 @@ import {
   Footer,
 } from "@/components/shared";
 import { API_BASE } from "@/lib/api";
+import { clearAuthSession, getAuthSession, setAuthRole } from "@/lib/auth";
 
 type LiveOrder = {
   id: number;
@@ -73,9 +74,7 @@ export default function OwnerDashboard() {
     if (!mounted) return;
 
     // Check authentication
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-    const storedUsername = localStorage.getItem("username");
+    const { token, role, username: storedUsername } = getAuthSession();
 
     if (!token || role !== "owner") {
       router.push("/login");
@@ -241,12 +240,12 @@ export default function OwnerDashboard() {
   /* ─── End Notification System ───────────────────────────────── */
 
   const handleLogout = () => {
-    localStorage.clear();
+    clearAuthSession();
     router.push("/login");
   };
 
   const handleSwitchToCustomer = () => {
-    localStorage.setItem("role", "user");
+    setAuthRole("user");
     router.push("/user");
   };
 

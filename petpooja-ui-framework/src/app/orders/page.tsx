@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChefHat, CheckCircle2 } from "lucide-react";
 import { formatSmartTimestamp } from "@/lib/time";
+import { getAuthSession } from "@/lib/auth";
 
 type VoiceOrder = {
   id: number;
@@ -70,9 +71,7 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!mounted) return;
 
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-    const storedUsername = localStorage.getItem("username");
+    const { token, role, username: storedUsername } = getAuthSession();
 
     if (!token || role !== "user") {
       router.push("/login");

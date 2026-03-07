@@ -23,6 +23,7 @@ import {
   type RecommenderItem,
 } from "@/lib/recommender";
 import { API_BASE } from "@/lib/api";
+import { clearAuthSession, getAuthSession } from "@/lib/auth";
 
 type MenuItem = {
   id: number;
@@ -570,9 +571,7 @@ export default function UserDashboard() {
   useEffect(() => {
     if (!mounted) return;
 
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-    const storedUsername = localStorage.getItem("username");
+    const { token, role, username: storedUsername } = getAuthSession();
 
     if (!token || role !== "user") {
       router.push("/login");
@@ -1292,7 +1291,7 @@ export default function UserDashboard() {
   };
 
   const handleLogout = () => {
-    localStorage.clear();
+    clearAuthSession();
     router.push("/login");
   };
 

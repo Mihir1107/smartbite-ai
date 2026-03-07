@@ -14,6 +14,7 @@ import {
   Clock3,
 } from "lucide-react";
 import Link from "next/link";
+import { getAuthSession } from "@/lib/auth";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -27,8 +28,7 @@ export default function LandingPage() {
     if (!mounted) return;
 
     // Check if user is already logged in
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
+    const { token, role } = getAuthSession();
 
     if (token && role) {
       // Redirect to appropriate dashboard
